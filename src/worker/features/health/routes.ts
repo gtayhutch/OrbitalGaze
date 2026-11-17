@@ -17,12 +17,12 @@ import type {AppContext} from '../../app_context';
 /**
  * Router for the health feature, mounted at `/api/v1/health` in `app.ts`.
  *
- * `GET /` responds 200 with `{status: "ok", environment}`.
+ * `GET /` responds 200 with `{data: {status: "ok", environment}}`.
  */
 export const healthRoutes = new Hono<AppContext>().get('/', c => {
   const body: HealthResponse = {
     status: 'ok',
     environment: c.var.config.appEnvironment,
   };
-  return c.json(body);
+  return c.json({data: body});
 });

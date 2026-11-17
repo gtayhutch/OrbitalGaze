@@ -14,16 +14,17 @@ import {z} from 'zod';
 /**
  * Machine-readable error categories, each tied to one HTTP status:
  *
- * - `bad_request` (400): the request was malformed or failed validation.
- * - `not_found` (404): no such route or resource.
- * - `rate_limited` (429): too many requests from this client; try later.
- * - `internal_error` (500): something failed on our side.
+ * - `INVALID_INPUT` (400): the request was malformed or failed validation.
+ * - `NOT_FOUND` (404): no such route or resource, or one the caller may not
+ *   see (we don't reveal which).
+ * - `RATE_LIMITED` (429): too many requests from this client; try later.
+ * - `INTERNAL` (500): something failed on our side.
  */
 export const API_ERROR_CODES = [
-  'bad_request',
-  'not_found',
-  'rate_limited',
-  'internal_error',
+  'INVALID_INPUT',
+  'NOT_FOUND',
+  'RATE_LIMITED',
+  'INTERNAL',
 ] as const;
 
 /** Validates an error code against {@link API_ERROR_CODES}. */
@@ -38,6 +39,11 @@ export const ApiErrorResponseSchema = z.object({
     code: ApiErrorCodeSchema,
     message: z.string(),
     requestId: z.string(),
+    /**
+     * For `INVALID_INPUT`: a message per invalid field, keyed by the field's
+     * name (for example `{q: ["Too long."]}`).
+     */
+    fieldErrors: z.record(z.string(), z.array(z.string())).optional(),
   }),
 });
 
