@@ -1,0 +1,4 @@
+# Generated files: formatted by their generators, not by hand.
+pnpm-lock.yaml
+worker-configuration.d.ts
+src/client/components/ui/
