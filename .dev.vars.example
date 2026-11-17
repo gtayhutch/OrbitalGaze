@@ -1,0 +1,5 @@
+# Local-only Worker secrets for `pnpm dev`. Copy this file to .dev.vars.
+# .dev.vars is never committed, and it holds test values only. Real secrets
+# for staging and production are stored as Cloudflare Worker secrets.
+#
+# There are no Worker secrets yet. Add placeholders here as they are needed.

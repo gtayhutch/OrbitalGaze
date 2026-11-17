@@ -1,0 +1,73 @@
+# Checks that run on every pull request and on every push to the protected
+# branches. Branch protection requires the `verify` and `audit` jobs to pass
+# before anything merges.
+#
+# This workflow never deploys and holds no Cloudflare credentials. Deploys
+# run in Cloudflare Workers Builds, from the staging and production branches.
+#
+# Every third-party action is pinned to a full commit SHA (with the release in
+# a comment), so a moved tag can't change what runs here.
+name: CI
+
+on:
+  pull_request:
+    branches: [test, staging, production]
+  push:
+    branches: [test, staging, production]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Installs the pnpm version named in package.json's packageManager field.
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      # Fails if pnpm-lock.yaml doesn't match package.json.
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm exec playwright install --with-deps chromium
+
+      # Format, lint, type checks, unit and Worker tests, build, end-to-end tests.
+      - run: pnpm verify
+
+      - name: Upload the end-to-end report on failure
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7
+
+  audit:
+    name: audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      # Fails on known high or critical vulnerabilities in shipped dependencies.
+      - run: pnpm audit --prod --audit-level high

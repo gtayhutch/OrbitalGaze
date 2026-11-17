@@ -1,0 +1,95 @@
+/*
+ * Global styles and design tokens for the OrbitalGaze interface.
+ *
+ * The app has a single dark "space" theme: the globe sits on a black sky, and
+ * every overlay is a translucent dark panel with a teal accent. Colors are
+ * defined once as CSS variables below and exposed to Tailwind through
+ * `@theme`, so components use names like `bg-panel` or `text-primary` instead
+ * of raw color values. The shadcn/ui components read the same variables.
+ *
+ * Contrast: text colors on `--panel` meet at least 4.5:1, so small labels stay
+ * readable over the globe.
+ */
+@import 'tailwindcss';
+
+:root {
+  color-scheme: dark;
+
+  --radius: 0.75rem;
+
+  /* Page and text. */
+  --background: oklch(0.13 0.02 255);
+  --foreground: oklch(0.97 0.01 240);
+  --muted-foreground: oklch(0.78 0.02 245);
+
+  /* Translucent overlay panels ("glass") and their borders. */
+  --panel: oklch(0.18 0.03 250 / 0.78);
+  --panel-border: oklch(0.85 0.05 220 / 0.16);
+
+  /* Teal accent for active controls and highlights. */
+  --primary: oklch(0.8 0.13 190);
+  --primary-foreground: oklch(0.18 0.04 220);
+
+  /* Secondary surfaces and states used by shadcn/ui components. */
+  --secondary: oklch(0.26 0.03 250);
+  --secondary-foreground: oklch(0.97 0.01 240);
+  --accent: oklch(0.3 0.04 230);
+  --accent-foreground: oklch(0.97 0.01 240);
+  --destructive: oklch(0.64 0.21 25);
+  --warning: oklch(0.83 0.15 85);
+  --warning-foreground: oklch(0.2 0.04 85);
+  --border: oklch(0.85 0.05 220 / 0.16);
+  --input: oklch(0.85 0.05 220 / 0.2);
+  --ring: oklch(0.8 0.13 190);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-panel: var(--panel);
+  --color-panel-border: var(--panel-border);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+@layer base {
+  * {
+    border-color: var(--border);
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    margin: 0;
+    background-color: var(--background);
+    color: var(--foreground);
+    font-family:
+      'Inter',
+      ui-sans-serif,
+      system-ui,
+      -apple-system,
+      'Segoe UI',
+      Roboto,
+      sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+}

@@ -1,0 +1,75 @@
+// Cloudflare Worker configuration for OrbitalGaze.
+//
+// One Worker serves both halves of the app:
+//   - the React single-page app as static assets (built by Vite into dist/), and
+//   - the JSON API under /api/*, handled by src/worker/index.ts.
+//
+// Environments:
+//   - The top level of this file is the LOCAL environment used by `pnpm dev`
+//     and the tests. It deliberately has no account ID, routes, or remote
+//     bindings, so a bare deploy can't reach a real Cloudflare account.
+//   - `env.staging` and `env.production` describe the hosted environments.
+//     Each lives in its own Cloudflare account. Their database IDs are filled
+//     in when those accounts are set up; resource IDs are not secrets.
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "orbitalgaze",
+  "main": "./src/worker/index.ts",
+
+  // The runtime behavior date. Advancing it is a deliberate change made in
+  // its own pull request, with the full test suite run.
+  "compatibility_date": "2026-11-17",
+
+  "assets": {
+    // Unknown paths return index.html so the client-side app can route them.
+    "not_found_handling": "single-page-application",
+    // Only API paths run Worker code first; everything else is a static file.
+    "run_worker_first": ["/api/*"],
+  },
+
+  "observability": {
+    "enabled": true,
+    "traces": {"enabled": true},
+  },
+
+  // Non-secret settings. Secrets are never stored in this file.
+  "vars": {
+    "APP_ENV": "test",
+  },
+
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "orbitalgaze-local",
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "migrations",
+    },
+  ],
+
+  "env": {
+    "staging": {
+      "vars": {"APP_ENV": "staging"},
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "orbitalgaze-staging",
+          // Replace with the staging database ID when the staging account is created.
+          "database_id": "00000000-0000-0000-0000-000000000001",
+          "migrations_dir": "migrations",
+        },
+      ],
+    },
+    "production": {
+      "vars": {"APP_ENV": "production"},
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "orbitalgaze-production",
+          // Replace with the production database ID when the production account is created.
+          "database_id": "00000000-0000-0000-0000-000000000002",
+          "migrations_dir": "migrations",
+        },
+      ],
+    },
+  },
+}
