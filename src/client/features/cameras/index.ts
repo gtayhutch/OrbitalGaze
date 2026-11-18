@@ -8,12 +8,25 @@
  * touches Cesium so it can be loaded lazily.
  */
 export {CATEGORY_STYLES, type CategoryStyle} from './category_style';
-export {fetchCamera, fetchCameraIndex, searchCameras} from './camera_api';
 export {
+  fetchCamera,
+  fetchCameraFeed,
+  fetchCameraIndex,
+  searchCameras,
+} from './camera_api';
+export {
+  BOTTOM_SHEET_HEIGHT_CLASS,
   CameraDetailPanel,
   formatCoordinates,
   type CameraDetailPanelProps,
 } from './camera_detail_panel';
+export {CameraPreview} from './camera_preview';
+export {
+  useCameraFeed,
+  type CameraFeedResult,
+  type CameraFeedState,
+} from './use_camera_feed';
+export {WebcamCredit} from './webcam_credit';
 export {LayerPanel, type LayerPanelProps} from './layer_panel';
 export {useCameraDetail, type CameraDetailState} from './use_camera_detail';
 export {useCameraIndex, type CameraIndexState} from './use_camera_index';

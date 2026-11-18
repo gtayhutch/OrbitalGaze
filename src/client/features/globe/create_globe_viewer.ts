@@ -30,6 +30,12 @@ const MAX_RENDER_RESTARTS = 3;
 export interface GlobeViewerOptions {
   /** Cesium ion token; when absent, the bundled offline imagery is used. */
   readonly cesiumIonToken: string | undefined;
+  /**
+   * Where Cesium puts its imagery credits. Defaults to the bottom of the
+   * globe; the app passes its own credit strip so the credits can move
+   * clear of the bottom sheet on phones.
+   */
+  readonly creditContainer?: HTMLElement | undefined;
 }
 
 /** Which base imagery the globe shows; see the file header. */
@@ -112,6 +118,9 @@ export function createGlobeViewer(
     showRenderLoopErrors: false,
     requestRenderMode: true,
     maximumRenderTimeChange: Number.POSITIVE_INFINITY,
+    ...(options.creditContainer === undefined
+      ? {}
+      : {creditContainer: options.creditContainer}),
   });
 
   // Step 3: scene look. Lighting shades the night side of the Earth using the

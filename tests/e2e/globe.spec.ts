@@ -37,9 +37,12 @@ test('the app page carries the static security headers', async ({request}) => {
   expect(headers['x-content-type-options']).toBe('nosniff');
   expect(headers['x-frame-options']).toBe('DENY');
   expect(headers['referrer-policy']).toBe('strict-origin-when-cross-origin');
-  expect(headers['content-security-policy-report-only']).toContain(
-    "frame-ancestors 'none'",
-  );
+  const csp = headers['content-security-policy-report-only'];
+  expect(csp).toContain("frame-ancestors 'none'");
+  // Windy images and players load only from Windy's own hosts.
+  expect(csp).toContain('img-src');
+  expect(csp).toContain('https://imgproxy.windy.com');
+  expect(csp).toContain('frame-src https://webcams.windy.com;');
 });
 
 test('the interface overlays have no detectable accessibility violations', async ({

@@ -25,9 +25,10 @@ export const WINDY_SOURCE_ID = 'windy';
  * The Windy source record, written by the import job before its cameras.
  *
  * `attributionText` is the credit Windy's terms require. `allowedHosts` are
- * the hosts Windy serves camera images and players from; image and player
- * links from Windy are shown only if they point at one of them. They must
- * match the Content-Security-Policy in `public/_headers`.
+ * the hosts Windy links may point at: images, players, and Windy's own
+ * camera pages. A link from Windy is passed to browsers only if it is https
+ * on one of them. The image and player hosts must match the
+ * Content-Security-Policy in `public/_headers`.
  */
 export const WINDY_SOURCE: NewSource = {
   id: WINDY_SOURCE_ID,
@@ -35,7 +36,7 @@ export const WINDY_SOURCE: NewSource = {
   homepageUrl: 'https://www.windy.com/',
   licenseName: 'Windy Webcams API terms of use',
   attributionText: 'Webcams provided by windy.com',
-  allowedHosts: ['imgproxy.windy.com', 'webcams.windy.com'],
+  allowedHosts: ['imgproxy.windy.com', 'webcams.windy.com', 'www.windy.com'],
   // Stays off until the owner confirms Windy's terms for commercial use.
   commercialUseAllowed: false,
 };

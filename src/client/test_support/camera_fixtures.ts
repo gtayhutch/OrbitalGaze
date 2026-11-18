@@ -3,7 +3,11 @@
  *
  * Layer: client test support (jsdom only).
  */
-import type {CameraDetail, CameraIndexEntry} from '@/shared/cameras';
+import type {
+  CameraDetail,
+  CameraFeed,
+  CameraIndexEntry,
+} from '@/shared/cameras';
 
 /**
  * Builds a camera's details with sensible defaults.
@@ -31,6 +35,32 @@ export function buildCameraDetail(
       attributionText: 'Courtesy of the test source',
       homepageUrl: 'https://example.com',
     },
+    ...overrides,
+  };
+}
+
+/**
+ * Builds a camera feed (Windy-style links) with sensible defaults. The links
+ * expire ten minutes after `now`.
+ *
+ * @param overrides Fields to change.
+ * @param now The time the feed was fetched.
+ * @returns A valid `CameraFeed`.
+ */
+export function buildCameraFeed(
+  overrides: Partial<CameraFeed> = {},
+  now = new Date(),
+): CameraFeed {
+  return {
+    kind: 'windy',
+    imageUrl:
+      'https://imgproxy.windy.com/_/preview/plain/current/1/original.jpg?token=t1',
+    imageWidth: 400,
+    imageHeight: 224,
+    pageUrl: 'https://www.windy.com/webcams/1',
+    timelapseUrl: 'https://webcams.windy.com/webcams/public/embed/player/1/day',
+    liveUrl: null,
+    expiresAt: new Date(now.getTime() + 10 * 60 * 1000).toISOString(),
     ...overrides,
   };
 }

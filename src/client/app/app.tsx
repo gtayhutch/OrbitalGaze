@@ -29,6 +29,7 @@ import {
   useCameraDetail,
   useCameraIndex,
   useCategoryFilter,
+  WebcamCredit,
 } from '@/client/features/cameras';
 import {
   SearchDialog,
@@ -117,6 +118,7 @@ export function App(): React.JSX.Element {
             focus={focus}
             onSelectCamera={setCameraId}
             isDetailOpen={detail.status !== 'idle'}
+            credits={<WebcamCredit />}
           />
         </Suspense>
         <TopBar

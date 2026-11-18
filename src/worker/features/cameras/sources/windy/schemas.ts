@@ -43,6 +43,55 @@ export const WindyWebcamSchema = z.object({
 /** One webcam, validated. */
 export type WindyWebcam = z.infer<typeof WindyWebcamSchema>;
 
+/** Pixel size of one image variant. */
+const WindyImageSizeSchema = z.object({
+  width: z.number().int().positive(),
+  height: z.number().int().positive(),
+});
+
+/**
+ * A player link. v3 documents these as strings; older responses used
+ * `{embed: string}`, so both are accepted and reduced to the link.
+ */
+const WindyPlayerLinkSchema = z.union([
+  z.string(),
+  z.object({embed: z.string()}).transform(link => link.embed),
+]);
+
+/**
+ * One webcam as returned by the single-webcam endpoint with
+ * `include=images,player,urls`. Image links carry a token that expires
+ * (10 minutes on the free tier), so they are used right away, never stored.
+ */
+export const WindyWebcamFeedSchema = z.object({
+  webcamId: z.number().int().positive(),
+  status: z.string(),
+  images: z
+    .object({
+      current: z.object({
+        preview: z.string().optional(),
+        thumbnail: z.string().optional(),
+      }),
+      sizes: z
+        .object({
+          preview: WindyImageSizeSchema.optional(),
+          thumbnail: WindyImageSizeSchema.optional(),
+        })
+        .optional(),
+    })
+    .optional(),
+  player: z
+    .object({
+      day: WindyPlayerLinkSchema.optional(),
+      live: WindyPlayerLinkSchema.optional(),
+    })
+    .optional(),
+  urls: z.object({detail: z.string().optional()}).optional(),
+});
+
+/** One webcam's live image and player links, validated. */
+export type WindyWebcamFeed = z.infer<typeof WindyWebcamFeedSchema>;
+
 /** The outer shape of a list page; webcams are validated separately. */
 export const WindyListPageSchema = z.object({
   total: z.number().int().nonnegative().optional(),
