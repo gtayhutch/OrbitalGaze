@@ -21,6 +21,7 @@ import {z} from 'zod';
 
 import type {CameraIndex} from '@/shared/cameras';
 
+import {sha256Hex} from '../../lib/hash';
 import type {CameraRepository} from './repository';
 import {
   toNewCamera,
@@ -157,22 +158,6 @@ export interface FinalizeResult {
   readonly indexedCameras: number;
   /** False when the index was already up to date. */
   readonly indexWritten: boolean;
-}
-
-/**
- * Hashes the pin list, to tell whether the index file needs rewriting.
- *
- * @param text The serialized pin list.
- * @returns The SHA-256 hash as hex.
- */
-async function sha256Hex(text: string): Promise<string> {
-  const digest = await crypto.subtle.digest(
-    'SHA-256',
-    new TextEncoder().encode(text),
-  );
-  return [...new Uint8Array(digest)]
-    .map(byte => byte.toString(16).padStart(2, '0'))
-    .join('');
 }
 
 /**
