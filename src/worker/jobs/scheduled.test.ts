@@ -47,7 +47,8 @@ describe('handleScheduled', () => {
       queue,
     );
 
-    expect(queue.batches.map(batch => batch.length)).toEqual([100, 100]);
+    // 21 pages fit in one batch (the queue accepts up to 100 per call).
+    expect(queue.batches.map(batch => batch.length)).toEqual([21]);
     expect(queue.batches.flat()[0]).toEqual({
       kind: 'windy-page',
       runId: '2026-11-18',

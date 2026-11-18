@@ -57,7 +57,7 @@ export function buildCameraFeed(
       'https://imgproxy.windy.com/_/preview/plain/current/1/original.jpg?token=t1',
     imageWidth: 400,
     imageHeight: 224,
-    pageUrl: 'https://www.windy.com/webcams/1',
+    pageUrl: 'https://windy.com/webcams/1',
     timelapseUrl: 'https://webcams.windy.com/webcams/public/embed/player/1/day',
     liveUrl: null,
     expiresAt: new Date(now.getTime() + 10 * 60 * 1000).toISOString(),

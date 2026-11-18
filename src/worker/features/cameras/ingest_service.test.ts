@@ -77,16 +77,16 @@ function idOf(webcam: FakeWindyWebcam): string {
 }
 
 describe('planWindyImport', () => {
-  it('plans 200 pages of 50, covering the top 10,000, under one run ID', () => {
+  it("plans 21 pages of 50, up to the free tier's offset limit, under one run ID", () => {
     const messages = planWindyImport(new Date('2026-11-18T03:00:00Z'));
 
-    expect(messages).toHaveLength(200);
+    expect(messages).toHaveLength(21);
     expect(messages[0]).toEqual({
       kind: 'windy-page',
       runId: '2026-11-18',
       offset: 0,
     });
-    expect(messages.at(-1)?.offset).toBe(9_950);
+    expect(messages.at(-1)?.offset).toBe(1_000);
   });
 });
 

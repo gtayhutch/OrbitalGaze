@@ -6,7 +6,7 @@
  *
  * The nightly import has three steps:
  * 1. **Plan** ({@link planWindyImport}): one queue message per page of the
- *    10,000 most popular Windy webcams (200 pages of 50).
+ *    1,050 most popular Windy webcams (21 pages of 50).
  * 2. **Import** ({@link importWindyPage}): the queue consumer fetches one
  *    page from Windy and upserts its cameras.
  * 3. **Finish** ({@link finalizeImport}), hourly: cameras not seen for 48
@@ -33,10 +33,19 @@ import type {WindyClient} from './sources/windy/client';
 export const WINDY_IMPORT_PAGE_SIZE = 50;
 
 /**
- * How many of Windy's most popular webcams are imported. Windy's free tier
- * doesn't page past the first 10,000 results of a list.
+ * The largest list offset Windy accepts on our API tier. The free tier
+ * answers a higher offset with HTTP 400 ("Offset is over API tier limit
+ * 1000!", checked 2026-11-18); the professional tier allows 10,000. Raise
+ * this if the plan changes.
  */
-export const WINDY_IMPORT_MAX_CAMERAS = 10_000;
+export const WINDY_TIER_MAX_OFFSET = 1_000;
+
+/**
+ * How many of Windy's most popular webcams are imported: every page up to
+ * and including the tier's last offset.
+ */
+export const WINDY_IMPORT_MAX_CAMERAS =
+  WINDY_TIER_MAX_OFFSET + WINDY_IMPORT_PAGE_SIZE;
 
 /** An imported camera not seen for this long is marked offline. */
 export const STALE_AFTER_MS = 48 * 60 * 60 * 1000;
@@ -78,9 +87,9 @@ export function toDbTimestamp(date: Date): string {
  * Lists the page imports for one nightly run.
  *
  * @param now When the run starts; its UTC date becomes the run ID.
- * @returns One message per page, offsets 0 to 9,950.
+ * @returns One message per page, offsets 0 to 1,000.
  * @example
- * planWindyImport(new Date('2026-11-18T03:00:00Z')).length; // 200
+ * planWindyImport(new Date('2026-11-18T03:00:00Z')).length; // 21
  */
 export function planWindyImport(now: Date): IngestMessage[] {
   const runId = now.toISOString().slice(0, 10);
