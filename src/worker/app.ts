@@ -25,6 +25,7 @@ import {Hono, type MiddlewareHandler} from 'hono';
 
 import type {AppContext} from './app_context';
 import {cameraRoutes} from './features/cameras';
+import {cspReportRoutes} from './features/csp_reports';
 import {healthRoutes} from './features/health';
 import {
   createLayerRoutes,
@@ -118,6 +119,7 @@ export function createApp(options: AppOptions = {}): Hono<AppContext> {
   // Routes. Each feature exposes a router through its index.ts.
   app.route('/v1/health', healthRoutes);
   app.route('/v1/cameras', cameraRoutes);
+  app.route('/v1/csp-reports', cspReportRoutes);
   app.route(
     '/v1/layers',
     createLayerRoutes(options.snapshotSources ?? SNAPSHOT_SOURCES),

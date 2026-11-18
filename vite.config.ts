@@ -52,6 +52,10 @@ export default defineConfig(({command}) => ({
     }),
   ],
   define: {
+    // Exposed on the health response so CI can test the deployed commit.
+    ORBITALGAZE_DEPLOY_REVISION: JSON.stringify(
+      process.env['WORKERS_CI_COMMIT_SHA'] ?? '',
+    ),
     // Cesium reads this global to locate its runtime files; see the header.
     CESIUM_BASE_URL: JSON.stringify(
       command === 'serve'
