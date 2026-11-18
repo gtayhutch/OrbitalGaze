@@ -4,8 +4,9 @@
  * Layer: client tests (jsdom).
  *
  * The WebGL globe can't run in jsdom, so the globe feature is replaced with a
- * stand-in that shows how many pins it was given and offers a button that
- * "clicks" a pin. API calls are answered by a stubbed `fetch`.
+ * stand-in that shows how many pins it was given, how many categories are
+ * visible, and the credits it was handed, and offers a button that "clicks"
+ * a pin. API calls are answered by a stubbed `fetch`.
  */
 import {render, screen, within} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -25,6 +26,10 @@ vi.mock('@/client/features/globe', () => ({
   GlobeView: (props: GlobeViewProps) => (
     <div data-testid="globe">
       <span data-testid="globe-pin-count">{props.cameras.length}</span>
+      <span data-testid="globe-visible-categories">
+        {props.visibleCategories.size}
+      </span>
+      {props.credits}
       <button
         type="button"
         onClick={() => {
@@ -148,6 +153,76 @@ describe('camera selection', () => {
     expect(screen.queryByRole('complementary')).not.toBeInTheDocument();
     const requestedPaths = fetchStub.mock.calls.map(([input]) => String(input));
     expect(requestedPaths.some(path => path.includes('script'))).toBe(false);
+  });
+});
+
+describe('layers', () => {
+  it('shows the webcam credit while webcams are on', async () => {
+    stubHealthyApi();
+    render(<App />);
+
+    expect(
+      await screen.findByRole('list', {name: 'Data credits'}),
+    ).toHaveTextContent('Webcams provided by windy.com — add a webcam');
+    expect(screen.getByTestId('globe-visible-categories')).toHaveTextContent(
+      '7',
+    );
+  });
+
+  it('hides every webcam pin and the credit when the layer is switched off', async () => {
+    stubHealthyApi();
+    const user = userEvent.setup();
+    render(<App />);
+    await screen.findByText('4 shown');
+
+    await user.click(screen.getByRole('switch', {name: 'Public webcams'}));
+
+    expect(screen.getByTestId('globe-visible-categories')).toHaveTextContent(
+      '0',
+    );
+    expect(
+      screen.queryByRole('list', {name: 'Data credits'}),
+    ).not.toBeInTheDocument();
+  });
+
+  it('switches webcams back on when a camera is chosen in search', async () => {
+    stubApi({
+      '/api/v1/health': ok({status: 'ok', environment: 'test'}),
+      '/api/v1/cameras/index': ok({
+        generatedAt: '2026-11-17T00:00:00Z',
+        cameras: SAMPLE_INDEX,
+      }),
+      '/api/v1/cameras/cam-1': ok(buildCameraDetail()),
+      '/api/v1/cameras/search?q=tokyo': ok({
+        results: [
+          {
+            id: 'cam-1',
+            title: 'Tokyo Tower view',
+            placeName: 'Tokyo',
+            countryCode: 'JP',
+            category: 'landmark',
+            lat: 35.6586,
+            lng: 139.7454,
+          },
+        ],
+      }),
+    });
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(
+      await screen.findByRole('switch', {name: 'Public webcams'}),
+    );
+
+    await user.click(
+      screen.getByRole('button', {name: /Search places and cameras/}),
+    );
+    await user.type(screen.getByRole('combobox'), 'tokyo');
+    await user.click(
+      await screen.findByRole('option', {name: /Tokyo Tower view/}),
+    );
+
+    expect(screen.getByRole('switch', {name: 'Public webcams'})).toBeChecked();
+    expect(window.location.search).toBe('?camera=cam-1');
   });
 });
 
