@@ -1,6 +1,6 @@
 {
   "name": "orbitalgaze",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "license": "UNLICENSED",
   "description": "Interactive 3D globe for exploring public webcams around the world.",
