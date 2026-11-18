@@ -9,8 +9,11 @@
 //     and the tests. It deliberately has no account ID, routes, or remote
 //     bindings, so a bare deploy can't reach a real Cloudflare account.
 //   - `env.staging` and `env.production` describe the hosted environments.
-//     Each lives in its own Cloudflare account. Their database IDs are filled
-//     in when those accounts are set up; resource IDs are not secrets.
+//     Both live in the one Cloudflare account that holds orbitalgaze.com, as
+//     separate Workers with separate databases, buckets, queues, and
+//     secrets: a Worker can only use a custom domain on a zone in its own
+//     account. No resource is shared between the two blocks. Account and
+//     resource IDs are not secrets.
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "orbitalgaze",
@@ -99,6 +102,13 @@
 
   "env": {
     "staging": {
+      "name": "orbitalgaze-staging",
+      "account_id": "9fe808d792b2aa8f095351f40b89c3eb",
+      // Served only at staging.orbitalgaze.com; no workers.dev or preview
+      // URLs, so there is one address to protect and test.
+      "routes": [{"pattern": "staging.orbitalgaze.com", "custom_domain": true}],
+      "workers_dev": false,
+      "preview_urls": false,
       "vars": {"APP_ENV": "staging"},
       "secrets": {"required": ["WINDY_API_KEY"]},
       "queues": {
@@ -136,8 +146,7 @@
         {
           "binding": "DB",
           "database_name": "orbitalgaze-staging",
-          // Replace with the staging database ID when the staging account is created.
-          "database_id": "00000000-0000-0000-0000-000000000001",
+          "database_id": "8cc224b9-faca-4785-b740-44fa274acb59",
           "migrations_dir": "migrations",
         },
       ],
@@ -180,7 +189,7 @@
         {
           "binding": "DB",
           "database_name": "orbitalgaze-production",
-          // Replace with the production database ID when the production account is created.
+          // Replace with the production database ID when it is created.
           "database_id": "00000000-0000-0000-0000-000000000002",
           "migrations_dir": "migrations",
         },
