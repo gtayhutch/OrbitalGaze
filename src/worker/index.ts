@@ -7,7 +7,7 @@
  * - `fetch`: only `/api/*` requests reach it; all other paths are served as
  *   static files before any Worker code runs.
  * - `scheduled`: the cron triggers (the camera import plan and finish
- *   steps), handled in `jobs/scheduled.ts`.
+ *   steps, and the snapshot layer refresh), handled in `jobs/scheduled.ts`.
  * - `queue`: the camera import queue, handled in `jobs/ingest_queue.ts`.
  *
  * The app is created once per isolate and reused across requests. It holds
