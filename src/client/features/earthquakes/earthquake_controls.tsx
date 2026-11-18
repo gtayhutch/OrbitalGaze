@@ -11,7 +11,7 @@ import type {Earthquake} from '@/shared/earthquakes';
 /** Keep the layer controls small enough for the panel on a phone. */
 const MAX_LIST_ITEMS = 20;
 
-/** A failed refresh can reuse the last result for up to three intervals. */
+/** Mark the last successful snapshot stale after three intervals. */
 const STALE_AFTER_MS = 15 * 60_000;
 
 /** Format event time with the visitor's locale and local time zone. */
