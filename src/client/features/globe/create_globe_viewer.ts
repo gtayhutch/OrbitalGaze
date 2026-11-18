@@ -23,6 +23,8 @@ import {
   Viewer,
 } from 'cesium';
 
+import {attachRenderQuality} from './render_quality';
+
 /** How many times drawing restarts after a render error before giving up. */
 const MAX_RENDER_RESTARTS = 3;
 
@@ -126,6 +128,10 @@ export function createGlobeViewer(
   // Step 3: scene look. Lighting shades the night side of the Earth using the
   // real sun position for the current time.
   viewer.scene.globe.enableLighting = true;
+
+  // Sharp, anti-aliased frames while the view is still; cheaper frames while
+  // it moves. The listeners go away with the viewer.
+  attachRenderQuality(viewer);
 
   // Step 4: recover from occasional render errors. Cesium stops drawing after
   // any error in a frame (for example an image that failed to download). A

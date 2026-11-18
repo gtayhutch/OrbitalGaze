@@ -3,34 +3,57 @@
  *
  * Layer: client feature (browser only). Created and driven by `globe_view.tsx`.
  *
- * Pins are Cesium entities in one `CustomDataSource`. Cesium's built-in
- * clustering (`EntityCluster`) merges pins that would overlap on screen into
- * one numbered pin, recalculated as the camera moves. Clicking a single pin
- * selects that camera; clicking a numbered cluster zooms in on its cameras.
+ * Pins are billboards in one `BillboardCollection`, which Cesium draws in a
+ * single batch. That is much lighter than one entity per camera, and it
+ * scales to the many point layers to come.
+ *
+ * Clustering is our own screen-space clustering (`grid_cluster.ts`):
+ * - each camera is projected to the screen, and pins within
+ *   `CLUSTER_PIXEL_RANGE` of each other merge. That is what "would overlap"
+ *   means, wherever the camera is on the globe, including near its edge
+ *   where distances look squashed;
+ * - cameras on the far side of the Earth, and every camera once the view is
+ *   close to the ground, stay single;
+ * - pins are rebuilt when the camera stops moving and when the cameras,
+ *   filter or selection change, never on every frame;
+ * - the selected camera always keeps its own pin, drawn larger and on top.
+ *
+ * Clicking a single pin selects that camera; clicking a numbered cluster
+ * zooms to the area its cameras cover.
  *
  * Pin images are drawn once per category (and once per cluster count) with
- * Cesium's `PinBuilder` and cached, so thousands of pins share a handful of
- * images.
+ * Cesium's `PinBuilder` and cached. The collection stores each distinct
+ * image once, so thousands of pins share a handful of textures.
  */
 import {
+  BillboardCollection,
+  Cartesian2,
   Cartesian3,
   Color,
-  CustomDataSource,
-  Entity,
+  Ellipsoid,
+  EllipsoidalOccluder,
   PinBuilder,
+  Rectangle,
   ScreenSpaceEventHandler,
   ScreenSpaceEventType,
   VerticalOrigin,
   type Viewer,
 } from 'cesium';
 
-import {prefersReducedMotion} from '@/client/lib/motion';
 import {CATEGORY_STYLES} from '@/client/features/cameras';
+import {prefersReducedMotion} from '@/client/lib/motion';
 import {
   CAMERA_CATEGORIES,
   type CameraCategory,
   type CameraIndexEntry,
 } from '@/shared/cameras';
+
+import {
+  clusterPoints,
+  type PointCluster,
+  type ScreenPosition,
+} from './grid_cluster';
+import {requestRender} from './request_render';
 
 /** Pin height for a single camera, in screen pixels. */
 const CAMERA_PIN_SIZE_PX = 36;
@@ -41,23 +64,51 @@ const CLUSTER_PIN_SIZE_PX = 48;
 /** Color of cluster pins (the app's teal accent, darkened for contrast with white digits). */
 const CLUSTER_PIN_COLOR = '#0f766e';
 
-/** Pins closer than this many screen pixels are merged into a cluster. */
-const CLUSTER_PIXEL_RANGE = 45;
+/** Pins closer than this many CSS pixels on screen merge into a cluster. */
+const CLUSTER_PIXEL_RANGE = 48;
 
-/** Smallest group of overlapping pins that becomes a cluster. */
-const MIN_CLUSTER_SIZE = 3;
+/**
+ * Below this camera height, in metres, every pin shows on its own: at city
+ * scale, a cluster would hide cameras the visitor is looking for.
+ */
+const NO_CLUSTER_BELOW_METRES = 5_000;
 
 /** Clusters larger than this show "999+" instead of the exact count. */
 const MAX_CLUSTER_LABEL = 999;
 
+/** How much larger the selected camera's pin is drawn. */
+const SELECTED_PIN_SCALE = 1.4;
+
 /**
- * Height above the ground, in meters, when flying to a camera: about a city's
+ * Pulls the selected pin towards the viewer, in metres, so it draws on top
+ * of any pin it overlaps.
+ */
+const SELECTED_PIN_EYE_OFFSET = new Cartesian3(0, 0, -50);
+
+/**
+ * Within this distance of the camera, in metres, pins skip the depth test so
+ * they never clip into the ground at street level. It stays well inside the
+ * horizon at the heights where it applies, so pins on the far side of the
+ * Earth stay hidden.
+ */
+const DISABLE_DEPTH_TEST_WITHIN_METRES = 100_000;
+
+/**
+ * Height above the ground, in metres, when flying to a camera: about a city's
  * width in view.
  */
-const FLY_TO_HEIGHT_METERS = 40_000;
+const FLY_TO_HEIGHT_METRES = 40_000;
 
 /** Duration of a camera flight, in seconds (0 with reduced motion). */
 const FLY_DURATION_SECONDS = 2;
+
+/** Extra margin around a cluster's cameras when zooming to them, in degrees. */
+const CLUSTER_ZOOM_MARGIN_DEGREES = 0.05;
+
+/** What a click on a billboard refers to; stored as the billboard's `id`. */
+type PinTarget =
+  | {readonly kind: 'camera'; readonly cameraId: string}
+  | {readonly kind: 'cluster'; readonly cluster: PointCluster};
 
 /** What the globe view can do with the camera pins. */
 export interface CameraLayer {
@@ -65,10 +116,48 @@ export interface CameraLayer {
   setCameras(cameras: readonly CameraIndexEntry[]): void;
   /** Shows only pins in these categories. */
   setVisibleCategories(visible: ReadonlySet<CameraCategory>): void;
+  /** Highlights one camera's pin and keeps it out of clusters; `null` clears. */
+  setSelected(cameraId: string | null): void;
   /** Flies the view to a point above the given location. */
   flyTo(location: {readonly lat: number; readonly lng: number}): void;
   /** Removes the pins and click handling. Call before destroying the viewer. */
   destroy(): void;
+}
+
+/** Narrows a picked object's `id` to one of our pin targets. */
+function asPinTarget(value: unknown): PinTarget | null {
+  if (typeof value !== 'object' || value === null || !('kind' in value)) {
+    return null;
+  }
+  // Safe: only this layer creates billboards with a `kind`.
+  return value as PinTarget;
+}
+
+/** The area covered by a cluster's cameras, with a small margin. */
+function clusterRectangle(
+  ids: readonly string[],
+  cameraById: ReadonlyMap<string, CameraIndexEntry>,
+): Rectangle {
+  let west = 180;
+  let south = 90;
+  let east = -180;
+  let north = -90;
+  for (const id of ids) {
+    const camera = cameraById.get(id);
+    if (camera !== undefined) {
+      west = Math.min(west, camera.lng);
+      east = Math.max(east, camera.lng);
+      south = Math.min(south, camera.lat);
+      north = Math.max(north, camera.lat);
+    }
+  }
+  const margin = CLUSTER_ZOOM_MARGIN_DEGREES;
+  return Rectangle.fromDegrees(
+    Math.max(west - margin, -180),
+    Math.max(south - margin, -90),
+    Math.min(east + margin, 180),
+    Math.min(north + margin, 90),
+  );
 }
 
 /**
@@ -88,11 +177,18 @@ export function createCameraLayer(
   onSelect: (cameraId: string) => void,
 ): CameraLayer {
   const pinBuilder = new PinBuilder();
-  const dataSource = new CustomDataSource('cameras');
-  const categoryById = new Map<string, CameraCategory>();
+  const billboards = viewer.scene.primitives.add(
+    new BillboardCollection({scene: viewer.scene}),
+  );
+  let cameras: readonly CameraIndexEntry[] = [];
+  const cameraById = new Map<string, CameraIndexEntry>();
+  // Each camera's position on the globe, computed once per index load.
+  const positionById = new Map<string, Cartesian3>();
+  const screenScratch = new Cartesian2();
   let visibleCategories: ReadonlySet<CameraCategory> = new Set(
     CAMERA_CATEGORIES,
   );
+  let selectedId: string | null = null;
 
   // Step 1: cached pin images.
   const pinImageByCategory = new Map<CameraCategory, string>();
@@ -127,28 +223,81 @@ export function createCameraLayer(
     return image;
   };
 
-  // Step 2: clustering. Cesium calls the listener for each cluster it forms;
-  // the default label is replaced with a numbered pin.
-  const clustering = dataSource.clustering;
-  clustering.enabled = true;
-  clustering.pixelRange = CLUSTER_PIXEL_RANGE;
-  clustering.minimumClusterSize = MIN_CLUSTER_SIZE;
-  const removeClusterListener = clustering.clusterEvent.addEventListener(
-    (clusteredEntities: Entity[], cluster) => {
-      cluster.label.show = false;
-      cluster.billboard.show = true;
-      // The label's `id` holds the clustered entities; copying it to the
-      // billboard makes a click on the numbered pin return them.
-      const clusteredEntitiesId: unknown = cluster.label.id;
-      cluster.billboard.id = clusteredEntitiesId;
-      cluster.billboard.verticalOrigin = VerticalOrigin.BOTTOM;
-      cluster.billboard.image = clusterImageFor(clusteredEntities.length);
-    },
-  );
-  void viewer.dataSources.add(dataSource);
+  // Step 2: where a camera's pin is on screen in the current view; `null`
+  // (stay single) behind the Earth, off screen, or close to the ground.
+  const screenPositionFinder = (): ((
+    camera: CameraIndexEntry,
+  ) => ScreenPosition | null) => {
+    if (viewer.camera.positionCartographic.height < NO_CLUSTER_BELOW_METRES) {
+      return () => null;
+    }
+    const occluder = new EllipsoidalOccluder(
+      Ellipsoid.WGS84,
+      viewer.camera.positionWC,
+    );
+    return camera => {
+      const position = positionById.get(camera.id);
+      if (position === undefined || !occluder.isPointVisible(position)) {
+        return null;
+      }
+      const onScreen = viewer.scene.cartesianToCanvasCoordinates(
+        position,
+        screenScratch,
+      );
+      return onScreen === undefined ? null : {x: onScreen.x, y: onScreen.y};
+    };
+  };
 
-  // Step 3: clicks. A picked single pin has an Entity as its `id`; a picked
-  // cluster has the array of entities it contains.
+  // Step 3: (re)build every billboard for the current cameras, filter,
+  // selection, and view.
+  const rebuild = (): void => {
+    const visible = cameras.filter(camera =>
+      visibleCategories.has(camera.category),
+    );
+    const keepIds = selectedId === null ? undefined : new Set([selectedId]);
+    const {singles, clusters} = clusterPoints(visible, {
+      positionOf: screenPositionFinder(),
+      pixelRange: CLUSTER_PIXEL_RANGE,
+      ...(keepIds === undefined ? {} : {keepIds}),
+    });
+
+    billboards.removeAll();
+    for (const single of singles) {
+      const camera = cameraById.get(single.id);
+      if (camera === undefined) {
+        continue;
+      }
+      const isSelected = camera.id === selectedId;
+      billboards.add({
+        id: {kind: 'camera', cameraId: camera.id} satisfies PinTarget,
+        position:
+          positionById.get(camera.id) ??
+          Cartesian3.fromDegrees(camera.lng, camera.lat),
+        image: pinImageFor(camera.category),
+        verticalOrigin: VerticalOrigin.BOTTOM,
+        disableDepthTestDistance: DISABLE_DEPTH_TEST_WITHIN_METRES,
+        scale: isSelected ? SELECTED_PIN_SCALE : 1,
+        eyeOffset: isSelected ? SELECTED_PIN_EYE_OFFSET : Cartesian3.ZERO,
+      });
+    }
+    for (const cluster of clusters) {
+      billboards.add({
+        id: {kind: 'cluster', cluster} satisfies PinTarget,
+        position: Cartesian3.fromDegrees(cluster.lng, cluster.lat),
+        image: clusterImageFor(cluster.ids.length),
+        verticalOrigin: VerticalOrigin.BOTTOM,
+        disableDepthTestDistance: DISABLE_DEPTH_TEST_WITHIN_METRES,
+      });
+    }
+    requestRender(viewer);
+  };
+
+  // Step 4: after the camera stops, re-cluster for the new view. About a
+  // thousand projections take a few milliseconds, once per movement.
+  const removeMoveEndListener = viewer.camera.moveEnd.addEventListener(rebuild);
+
+  // Step 5: clicks. A single pin selects its camera; a cluster zooms to the
+  // area its cameras cover.
   const clickHandler = new ScreenSpaceEventHandler(viewer.scene.canvas);
   clickHandler.setInputAction(
     (event: ScreenSpaceEventHandler.PositionedEvent) => {
@@ -156,16 +305,12 @@ export function createCameraLayer(
       if (typeof picked !== 'object' || picked === null || !('id' in picked)) {
         return;
       }
-      const target: unknown = picked.id;
-      if (target instanceof Entity && categoryById.has(target.id)) {
-        onSelect(target.id);
-        return;
-      }
-      if (Array.isArray(target)) {
-        const entities = target.filter(
-          (item): item is Entity => item instanceof Entity,
-        );
-        void viewer.flyTo(entities, {
+      const target = asPinTarget(picked.id);
+      if (target?.kind === 'camera') {
+        onSelect(target.cameraId);
+      } else if (target?.kind === 'cluster') {
+        viewer.camera.flyTo({
+          destination: clusterRectangle(target.cluster.ids, cameraById),
           duration: prefersReducedMotion() ? 0 : FLY_DURATION_SECONDS,
         });
       }
@@ -173,39 +318,32 @@ export function createCameraLayer(
     ScreenSpaceEventType.LEFT_CLICK,
   );
 
-  /** Applies the category filter to every pin, then redraws. */
-  const applyVisibility = (): void => {
-    for (const entity of dataSource.entities.values) {
-      const category = categoryById.get(entity.id);
-      entity.show = category !== undefined && visibleCategories.has(category);
-    }
-    viewer.scene.requestRender();
-  };
-
   return {
-    setCameras(cameras) {
-      // Suspend change events so thousands of additions trigger one update.
-      dataSource.entities.suspendEvents();
-      dataSource.entities.removeAll();
-      categoryById.clear();
-      for (const camera of cameras) {
-        categoryById.set(camera.id, camera.category);
-        dataSource.entities.add({
-          id: camera.id,
-          position: Cartesian3.fromDegrees(camera.lng, camera.lat),
-          billboard: {
-            image: pinImageFor(camera.category),
-            verticalOrigin: VerticalOrigin.BOTTOM,
-          },
-        });
+    setCameras(next) {
+      cameras = next;
+      cameraById.clear();
+      positionById.clear();
+      for (const camera of next) {
+        cameraById.set(camera.id, camera);
+        positionById.set(
+          camera.id,
+          Cartesian3.fromDegrees(camera.lng, camera.lat),
+        );
       }
-      dataSource.entities.resumeEvents();
-      applyVisibility();
+      rebuild();
     },
 
     setVisibleCategories(visible) {
       visibleCategories = visible;
-      applyVisibility();
+      rebuild();
+    },
+
+    setSelected(cameraId) {
+      if (cameraId === selectedId) {
+        return;
+      }
+      selectedId = cameraId;
+      rebuild();
     },
 
     flyTo(location) {
@@ -213,7 +351,7 @@ export function createCameraLayer(
         destination: Cartesian3.fromDegrees(
           location.lng,
           location.lat,
-          FLY_TO_HEIGHT_METERS,
+          FLY_TO_HEIGHT_METRES,
         ),
         duration: prefersReducedMotion() ? 0 : FLY_DURATION_SECONDS,
       });
@@ -221,9 +359,9 @@ export function createCameraLayer(
 
     destroy() {
       clickHandler.destroy();
-      removeClusterListener();
+      removeMoveEndListener();
       if (!viewer.isDestroyed()) {
-        viewer.dataSources.remove(dataSource, true);
+        viewer.scene.primitives.remove(billboards);
       }
     },
   };

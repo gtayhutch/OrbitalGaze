@@ -141,6 +141,7 @@ export function App(): React.JSX.Element {
             cameras={index.status === 'ready' ? index.cameras : NO_CAMERAS}
             visibleCategories={showWebcams ? filter.visible : NO_CATEGORIES}
             focus={focus}
+            selectedCameraId={selectedCameraId}
             onSelectCamera={setCameraId}
             isDetailOpen={detail.status !== 'idle'}
             credits={<CreditBar active={activeLayers.active} />}

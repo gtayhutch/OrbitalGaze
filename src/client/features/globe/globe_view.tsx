@@ -7,8 +7,8 @@
  * React. This component bridges the two:
  * - A ref callback creates the viewer and the camera pin layer when the
  *   container element appears, and destroys both when it goes away.
- * - Effects push React props (cameras, visible categories, the point to fly
- *   to) into the pin layer whenever they change.
+ * - Effects push React props (cameras, visible categories, the selected
+ *   camera, the point to fly to) into the pin layer whenever they change.
  * - Cesium's loading progress becomes React state for the loading and error
  *   overlays.
  *
@@ -54,6 +54,8 @@ export interface GlobeViewProps {
   visibleCategories: ReadonlySet<CameraCategory>;
   /** Where to fly, for example the selected camera; `null` stays put. */
   focus: GlobeFocus | null;
+  /** The selected camera, whose pin is highlighted and never clustered. */
+  selectedCameraId?: string | null;
   /** Called with a camera's ID when its pin is clicked. */
   onSelectCamera: (cameraId: string) => void;
   /**
@@ -89,6 +91,7 @@ export function GlobeView({
   cameras,
   visibleCategories,
   focus,
+  selectedCameraId = null,
   onSelectCamera,
   isDetailOpen,
   credits,
@@ -159,6 +162,9 @@ export function GlobeView({
   useEffect(() => {
     layerRef.current?.setCameras(cameras);
   }, [cameras]);
+  useEffect(() => {
+    layerRef.current?.setSelected(selectedCameraId);
+  }, [selectedCameraId]);
   // Callers keep `focus` referentially stable until the target changes (see
   // the `GlobeFocus` docs), so this flies once per new target.
   useEffect(() => {
