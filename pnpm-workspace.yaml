@@ -1,0 +1,13 @@
+# Lets pnpm run the install scripts these packages need: esbuild and workerd
+# download their platform-specific binaries during install.
+allowBuilds:
+  esbuild: true
+  workerd: true
+
+# Version overrides for transitive dependencies, each with its reason:
+# - tmp: versions before 0.2.6 have a path traversal advisory. It reaches us
+#   only through the gts > inquirer > external-editor prompt (development
+#   only), whose ^0.0.33 range never picks up the fix. The tmp functions
+#   external-editor uses are unchanged in 0.2.x.
+overrides:
+  'tmp@<0.2.6': '^0.2.6'

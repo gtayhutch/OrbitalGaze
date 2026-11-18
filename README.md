@@ -23,23 +23,23 @@ staging or production environments.
 
 ## How it's built
 
-| Part | Technology |
-| --- | --- |
+| Part                | Technology                                                 |
+| ------------------- | ---------------------------------------------------------- |
 | Globe and interface | TypeScript, React, Vite, CesiumJS, Tailwind CSS, shadcn/ui |
-| API and edge logic | Hono on Cloudflare Workers |
-| Data | Cloudflare D1 (SQLite) and R2 |
-| Background jobs | Cloudflare Cron Triggers and Queues |
-| Tests | Vitest, Playwright |
+| API and edge logic  | Hono on Cloudflare Workers                                 |
+| Data                | Cloudflare D1 (SQLite) and R2                              |
+| Background jobs     | Cloudflare Cron Triggers and Queues                        |
+| Tests               | Vitest, Playwright                                         |
 
 Source layout:
 
-| Path | Contents |
-| --- | --- |
-| `src/client/` | The browser app: globe, camera player, search, and filters |
-| `src/worker/` | The Cloudflare Worker: API routes, feed proxy, scheduled jobs |
+| Path          | Contents                                                       |
+| ------------- | -------------------------------------------------------------- |
+| `src/client/` | The browser app: globe, camera player, search, and filters     |
+| `src/worker/` | The Cloudflare Worker: API routes, feed proxy, scheduled jobs  |
 | `src/shared/` | Types, validation schemas, and pure helpers used by both sides |
-| `migrations/` | Database schema migrations |
-| `tests/` | End-to-end tests |
+| `migrations/` | Database schema migrations                                     |
+| `tests/`      | End-to-end tests                                               |
 
 Every source file begins with a comment explaining its role, and every
 function and component is documented where it's defined.

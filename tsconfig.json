@@ -1,0 +1,14 @@
+{
+  // Entry point for editors and `tsc -b`. The real settings live in one
+  // tsconfig per side of the app, so browser code can't use Worker globals
+  // and Worker code can't use browser globals.
+  "files": [],
+  // Mirrors the alias in tsconfig.base.json for tools that read only this file.
+  "compilerOptions": {"paths": {"@/*": ["./src/*"]}},
+  "references": [
+    {"path": "./tsconfig.client.json"},
+    {"path": "./tsconfig.worker.json"},
+    {"path": "./tsconfig.shared.json"},
+    {"path": "./tsconfig.node.json"}
+  ]
+}

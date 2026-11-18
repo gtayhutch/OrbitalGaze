@@ -1,0 +1,8 @@
+# Local-only Worker secrets for `pnpm dev`. Copy this file to .dev.vars.
+# .dev.vars is never committed, and it holds test values only. Real secrets
+# for staging and production are stored as Cloudflare Worker secrets.
+#
+# Windy Webcams API key (free tier is fine locally): create one at
+# https://api.windy.com/keys. Leave it empty to skip the Windy import jobs;
+# the synthetic seed (`pnpm db:seed`) works without it.
+WINDY_API_KEY=

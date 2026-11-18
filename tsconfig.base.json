@@ -1,0 +1,32 @@
+{
+  // Compiler settings shared by every part of the codebase. Each side of the
+  // app (client, worker, shared, tooling) extends this file in its own
+  // tsconfig so it sees only the globals and libraries that exist where its
+  // code actually runs.
+  "compilerOptions": {
+    "target": "ES2024",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "verbatimModuleSyntax": true,
+    "isolatedModules": true,
+    "resolveJsonModule": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+
+    // Strictness: everything under `strict`, plus checks that catch common
+    // mistakes with arrays, overrides, switch statements, and caught errors.
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+    "useUnknownInCatchVariables": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "exactOptionalPropertyTypes": true,
+
+    // `@/…` imports resolve from src/, for code outside the current feature.
+    "paths": {
+      "@/*": ["./src/*"]
+    }
+  }
+}

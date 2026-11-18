@@ -1,0 +1,26 @@
+<!doctype html>
+<!--
+  The single HTML page of the OrbitalGaze app. React renders everything into
+  #root (see src/client/main.tsx). The noscript message covers visitors whose
+  browsers have JavaScript turned off, since the globe can't work without it.
+-->
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#0b1020" />
+    <meta
+      name="description"
+      content="Spin an interactive 3D globe and watch public webcams from around the world."
+    />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <title>OrbitalGaze: the world, live</title>
+  </head>
+  <body>
+    <noscript
+      >OrbitalGaze needs JavaScript to show the interactive globe.</noscript
+    >
+    <div id="root"></div>
+    <script type="module" src="/src/client/main.tsx"></script>
+  </body>
+</html>
