@@ -62,7 +62,10 @@ export interface GlobeViewProps {
    * move above it).
    */
   isDetailOpen: boolean;
-  /** Extra credits shown beside the imagery credits, such as the webcam provider's. */
+  /**
+   * The data credits shown above the imagery credits (the layers' credit
+   * bar). It brings its own background, and may render nothing.
+   */
   credits?: React.ReactNode;
   /** Extra classes for the root element, usually for positioning. */
   className?: string;
@@ -176,11 +179,7 @@ export function GlobeView({
           isDetailOpen && 'max-md:bottom-[calc(60dvh+0.25rem)]',
         )}
       >
-        {credits !== undefined && (
-          <div className="rounded bg-background/70 px-1.5 py-0.5 backdrop-blur-sm">
-            {credits}
-          </div>
-        )}
+        {credits}
         <div ref={imageryCreditsRef} className="og-imagery-credits" />
       </div>
       <div

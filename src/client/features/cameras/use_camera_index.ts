@@ -12,7 +12,12 @@ import {fetchCameraIndex} from './camera_api';
 /** The index request's progress. */
 export type CameraIndexState =
   | {readonly status: 'loading'}
-  | {readonly status: 'ready'; readonly cameras: readonly CameraIndexEntry[]}
+  | {
+      readonly status: 'ready';
+      readonly cameras: readonly CameraIndexEntry[];
+      /** When the server last rebuilt the list (ISO 8601). */
+      readonly generatedAt: string;
+    }
   | {readonly status: 'error'};
 
 /**
@@ -31,7 +36,11 @@ export function useCameraIndex(): CameraIndexState {
     const controller = new AbortController();
     fetchCameraIndex(controller.signal)
       .then(index => {
-        setState({status: 'ready', cameras: index.cameras});
+        setState({
+          status: 'ready',
+          cameras: index.cameras,
+          generatedAt: index.generatedAt,
+        });
       })
       .catch((error: unknown) => {
         if (controller.signal.aborted) {

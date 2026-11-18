@@ -3,7 +3,8 @@
  *
  * Layer: client feature (browser only).
  *
- * Data hooks, panels, and category styles for the camera layer. The Cesium
+ * Data hooks, panels, layer controls, and category styles for the camera
+ * layer. The layer's credit lives in the layer registry. The Cesium
  * pins themselves live in the globe feature, which owns everything that
  * touches Cesium so it can be loaded lazily.
  */
@@ -26,8 +27,10 @@ export {
   type CameraFeedResult,
   type CameraFeedState,
 } from './use_camera_feed';
-export {WebcamCredit} from './webcam_credit';
-export {LayerPanel, type LayerPanelProps} from './layer_panel';
+export {
+  CameraLayerControls,
+  type CameraLayerControlsProps,
+} from './camera_layer_controls';
 export {useCameraDetail, type CameraDetailState} from './use_camera_detail';
 export {useCameraIndex, type CameraIndexState} from './use_camera_index';
 export {

@@ -6,7 +6,7 @@
  * The globe fills the whole window. Interface panels float above it in
  * absolutely positioned layers:
  * - top left: the top bar (brand, environment badge, search), with the
- *   layer panel below it;
+ *   layer panel below it (layers grouped by domain, each with a switch);
  * - right (bottom sheet on phones): the selected camera's details.
  *
  * The selected camera lives in the URL (`?camera=<id>`), so a link opens the
@@ -14,7 +14,12 @@
  * loads its details and flies the globe there.
  *
  * Search (button or Ctrl K / ⌘K) opens a dialog; choosing a result selects
- * that camera exactly like clicking its pin.
+ * that camera exactly like clicking its pin, and switches the webcam layer
+ * on if it was off, so the chosen camera's pin is visible.
+ *
+ * Which layers are on comes from the layer registry and the visitor's saved
+ * choices. A layer that is off draws nothing, and its credit leaves the
+ * credit bar.
  *
  * The globe is loaded lazily: CesiumJS is several megabytes, so the shell
  * (brand, panels) appears first and the globe streams in behind it.
@@ -25,19 +30,23 @@ import {lazy, Suspense, useCallback, useMemo, useState} from 'react';
 
 import {
   CameraDetailPanel,
-  LayerPanel,
+  CameraLayerControls,
   useCameraDetail,
   useCameraIndex,
   useCategoryFilter,
-  WebcamCredit,
 } from '@/client/features/cameras';
+import {CreditBar, LayerPanel, useActiveLayers} from '@/client/features/layers';
 import {
   SearchDialog,
   SearchTrigger,
   useSearchShortcut,
 } from '@/client/features/search';
 import {useUrlParam} from '@/client/lib/use_url_param';
-import {CameraIdSchema, type CameraIndexEntry} from '@/shared/cameras';
+import {
+  CameraIdSchema,
+  type CameraCategory,
+  type CameraIndexEntry,
+} from '@/shared/cameras';
 
 import {AppErrorBoundary} from './app_error_boundary';
 import {TopBar} from './top_bar';
@@ -55,6 +64,9 @@ export const CAMERA_URL_PARAM = 'camera';
 /** Shared empty list, so the globe doesn't redraw while the index loads. */
 const NO_CAMERAS: readonly CameraIndexEntry[] = [];
 
+/** Shared empty set: every webcam pin hidden while the layer is off. */
+const NO_CATEGORIES: ReadonlySet<CameraCategory> = new Set();
+
 /**
  * The root component of the browser app.
  *
@@ -65,6 +77,9 @@ export function App(): React.JSX.Element {
   const environment = useAppEnvironment();
   const index = useCameraIndex();
   const filter = useCategoryFilter();
+  const activeLayers = useActiveLayers();
+  const {setLayerActive} = activeLayers;
+  const showWebcams = activeLayers.active.has('webcams');
 
   // The selection comes from the URL; anything that isn't a valid camera ID
   // (a mistyped or tampered link) is ignored.
@@ -77,6 +92,16 @@ export function App(): React.JSX.Element {
   const closeDetail = useCallback(() => {
     setCameraId(null);
   }, [setCameraId]);
+
+  // A camera chosen in search should be visible on the globe, so its layer
+  // comes on if it was off.
+  const selectSearchResult = useCallback(
+    (cameraId: string) => {
+      setLayerActive('webcams', true);
+      setCameraId(cameraId);
+    },
+    [setLayerActive, setCameraId],
+  );
 
   // Search opens from the top bar button or Ctrl K / ⌘K.
   const [isSearchOpen, setIsSearchOpen] = useState(false);
@@ -114,11 +139,11 @@ export function App(): React.JSX.Element {
           <GlobeView
             className="absolute inset-0"
             cameras={index.status === 'ready' ? index.cameras : NO_CAMERAS}
-            visibleCategories={filter.visible}
+            visibleCategories={showWebcams ? filter.visible : NO_CATEGORIES}
             focus={focus}
             onSelectCamera={setCameraId}
             isDetailOpen={detail.status !== 'idle'}
-            credits={<WebcamCredit />}
+            credits={<CreditBar active={activeLayers.active} />}
           />
         </Suspense>
         <TopBar
@@ -126,15 +151,17 @@ export function App(): React.JSX.Element {
           search={<SearchTrigger onOpen={openSearch} />}
         />
         <LayerPanel
-          index={index}
-          filter={filter}
+          activeLayers={activeLayers}
+          layerControls={{
+            webcams: <CameraLayerControls index={index} filter={filter} />,
+          }}
           className="absolute top-24 left-4"
         />
         <CameraDetailPanel detail={detail} onClose={closeDetail} />
         <SearchDialog
           open={isSearchOpen}
           onOpenChange={setIsSearchOpen}
-          onSelectCamera={setCameraId}
+          onSelectCamera={selectSearchResult}
         />
       </div>
     </AppErrorBoundary>

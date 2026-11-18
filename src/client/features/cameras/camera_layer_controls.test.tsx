@@ -1,36 +1,45 @@
 /**
- * @fileoverview Tests for the layer panel's category filters.
+ * @fileoverview Tests for the webcam layer's controls (counts, freshness,
+ * category filters).
  *
  * Layer: client tests (jsdom).
  */
 import {render, screen} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import {describe, expect, it} from 'vitest';
+import {afterEach, describe, expect, it, vi} from 'vitest';
 
 import {SAMPLE_INDEX} from '@/client/test_support/camera_fixtures';
 
-import {LayerPanel} from './layer_panel';
+import {CameraLayerControls} from './camera_layer_controls';
 import {
   HIDDEN_CATEGORIES_STORAGE_KEY,
   useCategoryFilter,
 } from './use_category_filter';
 import type {CameraIndexState} from './use_camera_index';
 
-/** Renders the panel wired to the real filter hook. */
-function PanelWithFilter({
+/** Renders the controls wired to the real filter hook. */
+function ControlsWithFilter({
   index,
 }: {
   index: CameraIndexState;
 }): React.JSX.Element {
   const filter = useCategoryFilter();
-  return <LayerPanel index={index} filter={filter} />;
+  return <CameraLayerControls index={index} filter={filter} />;
 }
 
-const READY: CameraIndexState = {status: 'ready', cameras: SAMPLE_INDEX};
+const READY: CameraIndexState = {
+  status: 'ready',
+  cameras: SAMPLE_INDEX,
+  generatedAt: '2026-11-18T11:00:00Z',
+};
 
-describe('LayerPanel', () => {
+afterEach(() => {
+  vi.useRealTimers();
+});
+
+describe('CameraLayerControls', () => {
   it('lists each category with its camera count', () => {
-    render(<PanelWithFilter index={READY} />);
+    render(<ControlsWithFilter index={READY} />);
 
     expect(screen.getByRole('checkbox', {name: /City\s*2/})).toBeChecked();
     expect(screen.getByRole('checkbox', {name: /Beach\s*1/})).toBeChecked();
@@ -39,7 +48,7 @@ describe('LayerPanel', () => {
 
   it('hides a category and remembers the choice on this device', async () => {
     const user = userEvent.setup();
-    render(<PanelWithFilter index={READY} />);
+    render(<ControlsWithFilter index={READY} />);
 
     await user.click(screen.getByRole('checkbox', {name: /City/}));
 
@@ -55,28 +64,35 @@ describe('LayerPanel', () => {
       HIDDEN_CATEGORIES_STORAGE_KEY,
       '["beach", "volcano"]',
     );
-    render(<PanelWithFilter index={READY} />);
+    render(<ControlsWithFilter index={READY} />);
 
     expect(screen.getByRole('checkbox', {name: /Beach/})).not.toBeChecked();
     expect(screen.getByRole('checkbox', {name: /City/})).toBeChecked();
   });
 
-  it('collapses and expands', async () => {
-    const user = userEvent.setup();
-    render(<PanelWithFilter index={READY} />);
-    const toggle = screen.getByRole('button', {name: 'Layers'});
+  it('says how recently the camera list changed', () => {
+    vi.useFakeTimers({now: new Date('2026-11-18T12:00:00Z')});
+    render(<ControlsWithFilter index={READY} />);
 
-    await user.click(toggle);
+    expect(screen.getByText('List updated 1 h ago')).toBeInTheDocument();
+    expect(screen.queryByText(/stale/)).not.toBeInTheDocument();
+  });
 
-    expect(toggle).toHaveAttribute('aria-expanded', 'false');
-    expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
+  it('flags a camera list that is days old as stale', () => {
+    vi.useFakeTimers({now: new Date('2026-11-22T12:00:00Z')});
+    render(<ControlsWithFilter index={READY} />);
+
+    expect(screen.getByText('List updated 4 days ago')).toBeInTheDocument();
+    expect(screen.getByText('· stale')).toBeInTheDocument();
   });
 
   it('shows loading and error states', () => {
-    const {rerender} = render(<PanelWithFilter index={{status: 'loading'}} />);
+    const {rerender} = render(
+      <ControlsWithFilter index={{status: 'loading'}} />,
+    );
     expect(screen.getByRole('status')).toHaveTextContent('Loading cameras');
 
-    rerender(<PanelWithFilter index={{status: 'error'}} />);
+    rerender(<ControlsWithFilter index={{status: 'error'}} />);
     expect(screen.getByRole('alert')).toHaveTextContent(
       "Couldn't load cameras",
     );
