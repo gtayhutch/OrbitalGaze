@@ -6,7 +6,11 @@
  * StrictMode is on, so in development React mounts components twice to expose
  * effects that don't clean up after themselves. The globe component is
  * written to handle that.
+ *
+ * `zod_setup` is imported first: modules run in import order, so Zod is
+ * configured before any other module can parse with it.
  */
+import './lib/zod_setup';
 import './index.css';
 
 import {StrictMode} from 'react';
