@@ -14,8 +14,8 @@
  * - {@link LAYER_REFRESH_CRON} (every five minutes): refreshes the snapshot
  *   layers that are due at this minute, and logs one line per layer.
  *
- * When two expressions match the same minute (for example 03:00), Cloudflare
- * sends one event per expression, so each job runs on its own.
+ * The new dispatcher uses one trigger and starts each due job independently.
+ * Legacy expressions remain recognized while Cloudflare applies the change.
  */
 import {
   createCameraRepository,
@@ -43,6 +43,18 @@ export const IMPORT_FINALIZE_CRON = '30 * * * *';
  * shortest interval a layer may ask for (`REFRESH_STEP_MINUTES`).
  */
 export const LAYER_REFRESH_CRON = '*/5 * * * *';
+
+/**
+ * Every five minutes, spelled distinctly from the previous snapshot-only
+ * trigger so it can still be recognized during schedule propagation.
+ */
+export const DISPATCH_CRON = '0-55/5 * * * *';
+
+/** UTC hour of the daily camera import, with no local time change. */
+const IMPORT_HOUR_UTC = 3;
+
+/** Minute of the hour for updating the camera index. */
+const FINALIZE_MINUTE_UTC = 30;
 
 /** Most messages one `sendBatch` call accepts. */
 const QUEUE_SEND_BATCH_LIMIT = 100;
@@ -153,38 +165,71 @@ export async function handleScheduled(
   const config = parseWorkerConfig(env);
   const now = new Date(controller.scheduledTime);
 
+  /** Queues the import only when this environment has a Windy key. */
+  const runImport = async (): Promise<void> => {
+    if (config.windyApiKey === null) {
+      logger.info('import skipped: no Windy API key is set');
+      return;
+    }
+    await planImport(deps.queue ?? env.INGEST_QUEUE, now, logger);
+  };
+
+  /** Rebuilds the camera index and records whether it changed. */
+  const runFinalize = async (): Promise<void> => {
+    const result = await finalizeImport({
+      cameras: createCameraRepository(env.DB),
+      bucket: env.CAMERA_INDEX,
+      now,
+    });
+    logger.info('import finalized', {
+      markedOffline: result.markedOffline,
+      indexedCameras: result.indexedCameras,
+      indexWritten: result.indexWritten,
+    });
+  };
+
+  const snapshotSources = deps.snapshotSources ?? SNAPSHOT_SOURCES;
+  /** Checks which snapshot sources are due and refreshes them. */
+  const runSnapshots = (): Promise<void> =>
+    refreshLayers(
+      snapshotSources,
+      env.LAYER_SNAPSHOTS,
+      now,
+      deps.fetch ?? fetch,
+      logger,
+    );
+
   switch (controller.cron) {
-    case IMPORT_PLAN_CRON: {
-      if (config.windyApiKey === null) {
-        logger.info('import skipped: no Windy API key is set');
-        return;
+    case DISPATCH_CRON: {
+      // Cloudflare supplies the scheduled time even if execution starts late.
+      const minute = now.getUTCMinutes();
+      const jobs: Promise<void>[] = [];
+      if (now.getUTCHours() === IMPORT_HOUR_UTC && minute === 0) {
+        jobs.push(runImport());
       }
-      await planImport(deps.queue ?? env.INGEST_QUEUE, now, logger);
-      return;
-    }
-    case IMPORT_FINALIZE_CRON: {
-      const result = await finalizeImport({
-        cameras: createCameraRepository(env.DB),
-        bucket: env.CAMERA_INDEX,
-        now,
-      });
-      logger.info('import finalized', {
-        markedOffline: result.markedOffline,
-        indexedCameras: result.indexedCameras,
-        indexWritten: result.indexWritten,
-      });
-      return;
-    }
-    case LAYER_REFRESH_CRON: {
-      await refreshLayers(
-        deps.snapshotSources ?? SNAPSHOT_SOURCES,
-        env.LAYER_SNAPSHOTS,
-        now,
-        deps.fetch ?? fetch,
-        logger,
+      if (minute === FINALIZE_MINUTE_UTC) {
+        jobs.push(runFinalize());
+      }
+      if (snapshotSources.length > 0) {
+        jobs.push(runSnapshots());
+      }
+
+      // Let all due work finish before propagating an unexpected failure.
+      const results = await Promise.allSettled(jobs);
+      const failures = results.flatMap(result =>
+        result.status === 'rejected' ? [result.reason as unknown] : [],
       );
+      if (failures.length > 0) {
+        throw new AggregateError(failures, 'A scheduled job failed.');
+      }
       return;
     }
+    case IMPORT_PLAN_CRON:
+      return runImport();
+    case IMPORT_FINALIZE_CRON:
+      return runFinalize();
+    case LAYER_REFRESH_CRON:
+      return runSnapshots();
     default:
       // A cron in wrangler.jsonc with no job here is a configuration mistake.
       logger.error('no job for this cron expression');
