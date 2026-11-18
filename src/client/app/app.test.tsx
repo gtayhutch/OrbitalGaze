@@ -31,7 +31,7 @@ afterEach(() => {
 
 describe('App', () => {
   it('renders the brand and the globe', async () => {
-    stubFetchJson({status: 'ok', environment: 'production'});
+    stubFetchJson({data: {status: 'ok', environment: 'production'}});
     render(<App />);
 
     expect(
@@ -41,7 +41,7 @@ describe('App', () => {
   });
 
   it('shows the environment badge outside production', async () => {
-    stubFetchJson({status: 'ok', environment: 'staging'});
+    stubFetchJson({data: {status: 'ok', environment: 'staging'}});
     render(<App />);
 
     expect(await screen.findByText('Staging')).toBeInTheDocument();

@@ -10,9 +10,12 @@
  *   1. request ID: a fresh ID, attached to the context and the response.
  *   2. request logger: a per-request logger plus one "request completed" line.
  *   3. security headers: the API's header baseline (see `lib/security_headers.ts`).
- *   4. no-store caching: API answers are never cached by browsers or proxies.
+ *   4. caching default: `no-store` unless the route chose a cache policy.
  *   5. configuration: validated settings attached as `c.var.config`.
- *   6. the matched route, or the not-found handler.
+ *   6. rate limiting: too many requests from one address get a 429
+ *      (see `lib/rate_limit.ts`).
+ *   7. the matched route (which validates its own input), or the not-found
+ *      handler.
  *
  * Every route is mounted here and nowhere else, so no endpoint can skip the
  * chain. Errors from any step land in one handler that answers with the
@@ -21,10 +24,12 @@
 import {Hono, type MiddlewareHandler} from 'hono';
 
 import type {AppContext} from './app_context';
+import {cameraRoutes} from './features/cameras';
 import {healthRoutes} from './features/health';
 import {parseWorkerConfig} from './lib/config';
 import {AppError, buildErrorBody} from './lib/errors';
 import {createLogger} from './lib/logger';
+import {rateLimit} from './lib/rate_limit';
 import {apiSecurityHeaders} from './lib/security_headers';
 
 /** Response header that carries the request ID back to the caller. */
@@ -58,10 +63,16 @@ const logRequests: MiddlewareHandler<AppContext> = async (c, next) => {
   });
 };
 
-/** Marks every API response as not cacheable. Cacheable routes opt in later. */
-const disableCaching: MiddlewareHandler<AppContext> = async (c, next) => {
+/**
+ * Makes `no-store` the default cache policy. Routes whose answers are safe to
+ * cache (the same for every visitor) set their own `Cache-Control`, which this
+ * leaves alone.
+ */
+const defaultToNoStore: MiddlewareHandler<AppContext> = async (c, next) => {
   await next();
-  c.header('Cache-Control', 'no-store');
+  if (!c.res.headers.has('Cache-Control')) {
+    c.header('Cache-Control', 'no-store');
+  }
 };
 
 /** Validates the Worker's settings and attaches them as `c.var.config`. */
@@ -85,16 +96,18 @@ export function createApp(): Hono<AppContext> {
   app.use(assignRequestId);
   app.use(logRequests);
   app.use(apiSecurityHeaders);
-  app.use(disableCaching);
+  app.use(defaultToNoStore);
   app.use(loadConfig);
+  app.use(rateLimit);
 
   // Routes. Each feature exposes a router through its index.ts.
   app.route('/v1/health', healthRoutes);
+  app.route('/v1/cameras', cameraRoutes);
 
   app.notFound(c =>
     c.json(
       buildErrorBody(
-        'not_found',
+        'NOT_FOUND',
         'No API endpoint at this path.',
         c.var.requestId,
       ),
@@ -106,7 +119,12 @@ export function createApp(): Hono<AppContext> {
     // Expected failures carry a safe message and their own status.
     if (error instanceof AppError) {
       return c.json(
-        buildErrorBody(error.code, error.publicMessage, c.var.requestId),
+        buildErrorBody(
+          error.code,
+          error.publicMessage,
+          c.var.requestId,
+          error.fieldErrors,
+        ),
         error.status,
       );
     }
@@ -120,7 +138,7 @@ export function createApp(): Hono<AppContext> {
     });
     return c.json(
       buildErrorBody(
-        'internal_error',
+        'INTERNAL',
         'Something went wrong on our side.',
         c.var.requestId,
       ),
