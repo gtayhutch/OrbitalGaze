@@ -1,9 +1,7 @@
 # Security headers for static files (the app page, scripts, and Cesium
 # assets). API responses get their headers from the Worker instead.
 #
-# The Content-Security-Policy starts in report-only mode: browsers report
-# violations without blocking anything, so the allowed sources can be
-# confirmed against real traffic before the policy is enforced.
+# The browser enforces this policy and sends violation categories to the API.
 # - script-src 'wasm-unsafe-eval': Cesium decodes 3D data with WebAssembly.
 # - worker-src blob: Cesium starts some web workers from in-memory code.
 # - style-src 'unsafe-inline': Cesium's widgets set inline styles.
@@ -21,4 +19,4 @@
   Cross-Origin-Opener-Policy: same-origin
   X-Frame-Options: DENY
   Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), usb=()
-  Content-Security-Policy-Report-Only: default-src 'self'; script-src 'self' 'wasm-unsafe-eval' https://static.cloudflareinsights.com; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.cesium.com https://*.virtualearth.net https://imgproxy.windy.com; connect-src 'self' https://api.cesium.com https://assets.ion.cesium.com https://*.virtualearth.net; font-src 'self'; frame-src https://webcams.windy.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'wasm-unsafe-eval' https://static.cloudflareinsights.com; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.cesium.com https://*.virtualearth.net https://imgproxy.windy.com; connect-src 'self' https://api.cesium.com https://assets.ion.cesium.com https://*.virtualearth.net; font-src 'self'; frame-src https://webcams.windy.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'; report-uri /api/v1/csp-reports
