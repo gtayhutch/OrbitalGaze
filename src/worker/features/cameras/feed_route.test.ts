@@ -82,8 +82,13 @@ function windyFeed(
         `https://webcams.windy.com/webcams/public/embed/player/${webcamId}/day`,
       ...(links.live === undefined ? {} : {live: links.live}),
     },
+    // Windy's real shape: the camera page is on the bare `windy.com` host,
+    // and the extra links (an admin page, the operator's own http site) are
+    // never passed on.
     urls: {
-      detail: links.detail ?? `https://www.windy.com/webcams/${webcamId}`,
+      detail: links.detail ?? `https://windy.com/webcams/${webcamId}`,
+      edit: `https://webcams-admin.windy.com/webcams/${webcamId}`,
+      provider: 'http://operator.example/weather.html',
     },
   };
 }
@@ -132,7 +137,7 @@ describe('GET /api/v1/cameras/:id/feed', () => {
       kind: 'windy',
       imageWidth: 400,
       imageHeight: 224,
-      pageUrl: `https://www.windy.com/webcams/${camera.externalId}`,
+      pageUrl: `https://windy.com/webcams/${camera.externalId}`,
       timelapseUrl: `https://webcams.windy.com/webcams/public/embed/player/${camera.externalId}/day`,
       liveUrl: null,
     });

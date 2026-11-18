@@ -24,6 +24,21 @@ test('the globe renders and reports ready', async ({page}) => {
   await expect(page.locator('canvas')).toBeVisible();
 });
 
+test("Cesium's runtime files are served from our origin", async ({request}) => {
+  // Cesium loads these from CESIUM_BASE_URL at run time. If the build copies
+  // them anywhere else, the app's fallback page is served instead and the
+  // globe never finishes loading.
+  const worker = await request.get('/cesium/Workers/transferTypedArrayTest.js');
+  expect(worker.status()).toBe(200);
+  expect(worker.headers()['content-type']).toContain('javascript');
+
+  const asset = await request.get(
+    '/cesium/Assets/approximateTerrainHeights.json',
+  );
+  expect(asset.status()).toBe(200);
+  expect(asset.headers()['content-type']).toContain('json');
+});
+
 test('the local environment badge comes from the API', async ({page}) => {
   await page.goto('/');
 

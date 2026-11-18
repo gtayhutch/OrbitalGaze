@@ -28,7 +28,9 @@ export const WINDY_SOURCE_ID = 'windy';
  * the hosts Windy links may point at: images, players, and Windy's own
  * camera pages. A link from Windy is passed to browsers only if it is https
  * on one of them. The image and player hosts must match the
- * Content-Security-Policy in `public/_headers`.
+ * Content-Security-Policy in `public/_headers`. Windy's camera page links
+ * (`urls.detail`) use the bare `windy.com` host, so both it and
+ * `www.windy.com` are allowed.
  */
 export const WINDY_SOURCE: NewSource = {
   id: WINDY_SOURCE_ID,
@@ -36,7 +38,12 @@ export const WINDY_SOURCE: NewSource = {
   homepageUrl: 'https://www.windy.com/',
   licenseName: 'Windy Webcams API terms of use',
   attributionText: 'Webcams provided by windy.com',
-  allowedHosts: ['imgproxy.windy.com', 'webcams.windy.com', 'www.windy.com'],
+  allowedHosts: [
+    'imgproxy.windy.com',
+    'webcams.windy.com',
+    'windy.com',
+    'www.windy.com',
+  ],
   // Stays off until the owner confirms Windy's terms for commercial use.
   commercialUseAllowed: false,
 };
@@ -48,8 +55,12 @@ const MAX_TITLE_LENGTH = 200;
 const MAX_PLACE_LENGTH = 200;
 
 /**
- * Our category for each Windy category ID. IDs not listed map to `other`.
- * Windy's list: `GET /webcams/api/v3/categories`.
+ * Our category for each Windy category ID, keyed in lower case. Windy's
+ * list (`GET /webcams/api/v3/categories`, checked 2026-11-18) is: airport,
+ * beach, building, city, coast, forest, indoor, lake, landscape, meteo,
+ * mountain, observatory, port, river, sportArea, square, traffic, village.
+ * Airport, indoor, and sportArea have no matching category of ours, so they
+ * map to `other` by being left out.
  */
 const CATEGORY_BY_WINDY_ID: Readonly<Record<string, CameraCategory>> = {
   traffic: 'traffic',
@@ -57,18 +68,16 @@ const CATEGORY_BY_WINDY_ID: Readonly<Record<string, CameraCategory>> = {
   coast: 'beach',
   meteo: 'weather',
   building: 'landmark',
-  landmark: 'landmark',
+  observatory: 'landmark',
   city: 'city',
   square: 'city',
-  harbor: 'city',
+  port: 'city',
+  village: 'city',
   landscape: 'nature',
   mountain: 'nature',
   lake: 'nature',
   forest: 'nature',
-  park: 'nature',
-  island: 'nature',
-  water: 'nature',
-  camping: 'nature',
+  river: 'nature',
 };
 
 /**

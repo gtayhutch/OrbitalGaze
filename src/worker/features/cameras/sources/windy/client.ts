@@ -90,6 +90,27 @@ export function isWindyKeyRejected(error: unknown): boolean {
 }
 
 /**
+ * Whether an error means Windy refused the request itself, so sending it
+ * again would get the same answer. For example, the free tier answers an
+ * offset over its limit with a 400. Timeouts (408) and rate limits (429)
+ * may pass, so they don't count.
+ *
+ * @param error Any thrown value.
+ * @returns True for a 4xx from Windy other than 408 and 429.
+ */
+export function isWindyRequestRefused(error: unknown): boolean {
+  return (
+    error instanceof OutboundError &&
+    error.failure === 'http-status' &&
+    error.status !== null &&
+    error.status >= 400 &&
+    error.status < 500 &&
+    error.status !== 408 &&
+    error.status !== 429
+  );
+}
+
+/**
  * Creates a Windy API client.
  *
  * @param options The API key and, for tests, a fake `fetch`.

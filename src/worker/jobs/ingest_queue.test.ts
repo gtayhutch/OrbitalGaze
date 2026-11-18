@@ -89,6 +89,30 @@ describe('handleIngestBatch', () => {
     ).toBe('retry');
   });
 
+  it('retries when Windy is rate limiting', async () => {
+    expect(
+      await consume(
+        pageMessage,
+        fakeFetch(() => jsonResponse({}, 429)),
+      ),
+    ).toBe('retry');
+  });
+
+  it('drops the message, without retrying, when Windy refuses the request', async () => {
+    const refusal = {
+      message: 'Offset is over API tier limit 1000!',
+      error: 'Bad Request',
+      statusCode: 400,
+    };
+
+    expect(
+      await consume(
+        pageMessage,
+        fakeFetch(() => jsonResponse(refusal, 400)),
+      ),
+    ).toBe('ack');
+  });
+
   it('drops the message, without retrying, when Windy rejects the key', async () => {
     expect(
       await consume(
@@ -103,7 +127,7 @@ describe('handleIngestBatch', () => {
 
     for (const body of [
       null,
-      {kind: 'windy-page', runId: '2026-11-18', offset: 10_000},
+      {kind: 'windy-page', runId: '2026-11-18', offset: 1_050},
       {kind: 'windy-page', runId: '2026-11-18', offset: 25},
       {kind: 'other', runId: '2026-11-18', offset: 0},
     ]) {

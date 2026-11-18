@@ -10,7 +10,10 @@
  * - a malformed message: logged and dropped (retrying can't fix it);
  * - Windy rejects the key (401/403): logged as an error and dropped, so a
  *   bad key doesn't loop through retries;
- * - any other failure (timeout, Windy error): retried after a minute, up to
+ * - Windy refuses the request (another 4xx, such as an offset over the
+ *   tier's limit): logged as an error and dropped, since it would be
+ *   refused again;
+ * - any other failure (timeout, rate limit, Windy error): retried after a minute, up to
  *   the queue's `max_retries`, then dropped with the failures logged.
  *
  * Importing a page twice is harmless, because cameras are upserted.
@@ -21,6 +24,7 @@ import {
   importWindyPage,
   IngestMessageSchema,
   isWindyKeyRejected,
+  isWindyRequestRefused,
 } from '../features/cameras';
 import {parseWorkerConfig} from '../lib/config';
 import {createLogger} from '../lib/logger';
@@ -82,6 +86,15 @@ export async function handleIngestBatch(
         logger.error('Windy rejected the API key; page dropped', {
           runId,
           offset,
+        });
+        message.ack();
+        continue;
+      }
+      if (isWindyRequestRefused(error)) {
+        logger.error('Windy refused the page request; page dropped', {
+          runId,
+          offset,
+          status: error instanceof OutboundError ? error.status : null,
         });
         message.ack();
         continue;

@@ -26,7 +26,7 @@ const FEED = {
     'https://imgproxy.windy.com/_/preview/plain/current/1/original.jpg?token=e2e',
   imageWidth: 400,
   imageHeight: 224,
-  pageUrl: 'https://www.windy.com/webcams/1',
+  pageUrl: 'https://windy.com/webcams/1',
   timelapseUrl: 'https://webcams.windy.com/webcams/public/embed/player/1/day',
   liveUrl: null,
   expiresAt: new Date(Date.now() + 9 * 60 * 1000).toISOString(),

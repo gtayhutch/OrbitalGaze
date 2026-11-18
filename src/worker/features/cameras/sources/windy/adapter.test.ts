@@ -91,8 +91,36 @@ describe('toCameraCategory', () => {
     expect(toCameraCategory(['City'])).toBe('city');
   });
 
+  it("maps every category in Windy's published list", () => {
+    // Windy's list as of 2026-11-18, with the category each one becomes.
+    const expected = {
+      airport: 'other',
+      beach: 'beach',
+      building: 'landmark',
+      city: 'city',
+      coast: 'beach',
+      forest: 'nature',
+      indoor: 'other',
+      lake: 'nature',
+      landscape: 'nature',
+      meteo: 'weather',
+      mountain: 'nature',
+      observatory: 'landmark',
+      port: 'city',
+      river: 'nature',
+      sportArea: 'other',
+      square: 'city',
+      traffic: 'traffic',
+      village: 'city',
+    };
+
+    for (const [windyId, category] of Object.entries(expected)) {
+      expect(toCameraCategory([windyId]), windyId).toBe(category);
+    }
+  });
+
   it('uses "other" for unknown or missing categories', () => {
-    expect(toCameraCategory(['sportarea'])).toBe('other');
+    expect(toCameraCategory(['harbor'])).toBe('other');
     expect(toCameraCategory([])).toBe('other');
   });
 });
@@ -118,5 +146,9 @@ describe('WINDY_SOURCE', () => {
     expect(WINDY_SOURCE.attributionText).toBe('Webcams provided by windy.com');
     expect(WINDY_SOURCE.homepageUrl).toBe('https://www.windy.com/');
     expect(WINDY_SOURCE.commercialUseAllowed).toBe(false);
+  });
+
+  it("allows the bare windy.com host that Windy's camera page links use", () => {
+    expect(WINDY_SOURCE.allowedHosts).toContain('windy.com');
   });
 });

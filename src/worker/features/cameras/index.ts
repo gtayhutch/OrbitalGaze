@@ -21,4 +21,8 @@ export {
   planWindyImport,
   type IngestMessage,
 } from './ingest_service';
-export {createWindyClient, isWindyKeyRejected} from './sources/windy/client';
+export {
+  createWindyClient,
+  isWindyKeyRejected,
+  isWindyRequestRefused,
+} from './sources/windy/client';
