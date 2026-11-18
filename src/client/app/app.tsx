@@ -5,20 +5,23 @@
  *
  * The globe fills the whole window. Interface panels float above it in
  * absolutely positioned layers:
- * - top left: the top bar (brand, environment badge), with the layer panel
- *   below it;
+ * - top left: the top bar (brand, environment badge, search), with the
+ *   layer panel below it;
  * - right (bottom sheet on phones): the selected camera's details.
  *
  * The selected camera lives in the URL (`?camera=<id>`), so a link opens the
  * same camera and Back closes it. Selecting a camera, from a pin or a link,
  * loads its details and flies the globe there.
  *
+ * Search (button or Ctrl K / ⌘K) opens a dialog; choosing a result selects
+ * that camera exactly like clicking its pin.
+ *
  * The globe is loaded lazily: CesiumJS is several megabytes, so the shell
  * (brand, panels) appears first and the globe streams in behind it.
  * Everything is wrapped in an error boundary so a failure shows a recovery
  * screen instead of a blank page.
  */
-import {lazy, Suspense, useCallback, useMemo} from 'react';
+import {lazy, Suspense, useCallback, useMemo, useState} from 'react';
 
 import {
   CameraDetailPanel,
@@ -27,6 +30,11 @@ import {
   useCameraIndex,
   useCategoryFilter,
 } from '@/client/features/cameras';
+import {
+  SearchDialog,
+  SearchTrigger,
+  useSearchShortcut,
+} from '@/client/features/search';
 import {useUrlParam} from '@/client/lib/use_url_param';
 import {CameraIdSchema, type CameraIndexEntry} from '@/shared/cameras';
 
@@ -69,6 +77,13 @@ export function App(): React.JSX.Element {
     setCameraId(null);
   }, [setCameraId]);
 
+  // Search opens from the top bar button or Ctrl K / ⌘K.
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const openSearch = useCallback(() => {
+    setIsSearchOpen(true);
+  }, []);
+  useSearchShortcut(openSearch);
+
   // Fly to the selected camera once its details (and coordinates) arrive.
   // The object only changes when the coordinates do, so the globe flies once
   // per selection.
@@ -104,13 +119,21 @@ export function App(): React.JSX.Element {
             isDetailOpen={detail.status !== 'idle'}
           />
         </Suspense>
-        <TopBar environment={environment} />
+        <TopBar
+          environment={environment}
+          search={<SearchTrigger onOpen={openSearch} />}
+        />
         <LayerPanel
           index={index}
           filter={filter}
           className="absolute top-24 left-4"
         />
         <CameraDetailPanel detail={detail} onClose={closeDetail} />
+        <SearchDialog
+          open={isSearchOpen}
+          onOpenChange={setIsSearchOpen}
+          onSelectCamera={setCameraId}
+        />
       </div>
     </AppErrorBoundary>
   );

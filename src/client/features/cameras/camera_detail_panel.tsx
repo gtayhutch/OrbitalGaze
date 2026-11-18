@@ -16,6 +16,7 @@ import {ExternalLink, VideoOff, X} from 'lucide-react';
 import {useEffect, useRef, useState} from 'react';
 
 import {Button} from '@/client/components/ui/button';
+import {formatPlace} from '@/client/lib/format';
 import {cn} from '@/client/lib/utils';
 import type {CameraDetail} from '@/shared/cameras';
 
@@ -64,18 +65,6 @@ function LocalTime({timeZone}: {timeZone: string}): React.JSX.Element | null {
   return formatted === null ? null : <>{formatted}</>;
 }
 
-/** Turns a two-letter country code into the visitor's language, if possible. */
-function countryName(countryCode: string): string {
-  try {
-    return (
-      new Intl.DisplayNames(undefined, {type: 'region'}).of(countryCode) ??
-      countryCode
-    );
-  } catch {
-    return countryCode;
-  }
-}
-
 /**
  * Formats coordinates as "35.6762° N, 139.6503° E".
  *
@@ -91,12 +80,7 @@ export function formatCoordinates(lat: number, lng: number): string {
 /** The body of the panel once the camera has loaded. */
 function CameraDetails({camera}: {camera: CameraDetail}): React.JSX.Element {
   const style = CATEGORY_STYLES[camera.category];
-  const place = [
-    camera.placeName,
-    camera.countryCode === null ? null : countryName(camera.countryCode),
-  ]
-    .filter(part => part !== null)
-    .join(', ');
+  const place = formatPlace(camera.placeName, camera.countryCode);
 
   return (
     <>

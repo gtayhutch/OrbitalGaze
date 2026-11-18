@@ -23,6 +23,9 @@ import {
   Viewer,
 } from 'cesium';
 
+/** How many times drawing restarts after a render error before giving up. */
+const MAX_RENDER_RESTARTS = 3;
+
 /** Options for {@link createGlobeViewer}. */
 export interface GlobeViewerOptions {
   /** Cesium ion token; when absent, the bundled offline imagery is used. */
@@ -105,6 +108,8 @@ export function createGlobeViewer(
     timeline: false,
     // Render only when something changes, instead of 60 times a second. This
     // saves battery on laptops and phones while the globe sits still.
+    // Render errors are handled below instead of with Cesium's modal panel.
+    showRenderLoopErrors: false,
     requestRenderMode: true,
     maximumRenderTimeChange: Number.POSITIVE_INFINITY,
   });
@@ -112,6 +117,19 @@ export function createGlobeViewer(
   // Step 3: scene look. Lighting shades the night side of the Earth using the
   // real sun position for the current time.
   viewer.scene.globe.enableLighting = true;
+
+  // Step 4: recover from occasional render errors. Cesium stops drawing after
+  // any error in a frame (for example an image that failed to download). A
+  // one-off failure shouldn't freeze the globe for good, so drawing restarts
+  // a few times; a persistent failure still stops, rather than looping.
+  let restartsLeft = MAX_RENDER_RESTARTS;
+  viewer.scene.renderError.addEventListener((_scene, error: unknown) => {
+    console.error('The globe hit a rendering error.', error);
+    if (restartsLeft > 0) {
+      restartsLeft -= 1;
+      viewer.useDefaultRenderLoop = true;
+    }
+  });
 
   return viewer;
 }
