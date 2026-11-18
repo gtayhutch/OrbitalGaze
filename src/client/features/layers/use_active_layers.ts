@@ -11,6 +11,10 @@
  * Storage can be unavailable (private browsing, blocked cookies) or hold
  * stale values (layers that no longer exist); both fall back to the
  * defaults.
+ *
+ * A share link can name its own layers. Those apply for this visit only:
+ * the visitor sees what the sender saw, and switching layers during the
+ * visit changes only the visit, never the visitor's saved choices.
  */
 import {useCallback, useMemo, useState} from 'react';
 
@@ -79,29 +83,56 @@ function isOn(choices: LayerChoices, layerId: LayerId): boolean {
 /**
  * Tracks which layers are switched on, remembering choices on this device.
  *
+ * @param linkLayers Layers named by a share link, used for this visit
+ *     instead of the saved choices; `null` (no link layers) uses the saved
+ *     choices. Read once, on first render.
  * @returns The active set and a setter. The set changes identity only when
  *     a choice changes, so components can depend on it.
  * @example
  * const layers = useActiveLayers();
  * const showWebcams = layers.active.has('webcams');
  */
-export function useActiveLayers(): ActiveLayers {
+export function useActiveLayers(
+  linkLayers: ReadonlySet<LayerId> | null = null,
+): ActiveLayers {
   const [choices, setChoices] = useState<LayerChoices>(readChoices);
+  // A link's layers, kept for the rest of the visit and never saved. Whether
+  // this is a link visit is fixed on the first render.
+  const [visitLayers, setVisitLayers] = useState(linkLayers);
+  const [isLinkVisit] = useState(linkLayers !== null);
 
-  const setLayerActive = useCallback((layerId: LayerId, active: boolean) => {
-    setChoices(previous => {
-      // Nothing changes when the layer is already in that state, so the
-      // active set keeps its identity and nothing redraws.
-      if (isOn(previous, layerId) === active) {
-        return previous;
+  const setLayerActive = useCallback(
+    (layerId: LayerId, active: boolean) => {
+      // In both branches, nothing changes when the layer is already in that
+      // state, so the active set keeps its identity and nothing redraws.
+      if (isLinkVisit) {
+        setVisitLayers(previous => {
+          if (previous === null || previous.has(layerId) === active) {
+            return previous;
+          }
+          const next = new Set(previous);
+          if (active) {
+            next.add(layerId);
+          } else {
+            next.delete(layerId);
+          }
+          return next;
+        });
+        return;
       }
-      const next = {...previous, [layerId]: active};
-      writeChoices(next);
-      return next;
-    });
-  }, []);
+      setChoices(previous => {
+        if (isOn(previous, layerId) === active) {
+          return previous;
+        }
+        const next = {...previous, [layerId]: active};
+        writeChoices(next);
+        return next;
+      });
+    },
+    [isLinkVisit],
+  );
 
-  const active = useMemo(
+  const savedActive = useMemo(
     () =>
       new Set(
         LAYER_DEFINITIONS.filter(layer => isOn(choices, layer.id)).map(
@@ -110,5 +141,5 @@ export function useActiveLayers(): ActiveLayers {
       ),
     [choices],
   );
-  return {active, setLayerActive};
+  return {active: visitLayers ?? savedActive, setLayerActive};
 }

@@ -3,8 +3,8 @@
  *
  * Layer: client app shell (browser only).
  *
- * Holds the OrbitalGaze brand, the environment badge, and the search button
- * (passed in by the app shell). The account menu will join them later. The
+ * Holds the OrbitalGaze brand, the environment badge, and the search and
+ * share buttons (passed in by the app shell). The account menu will join them later. The
  * bar floats over the globe, and only its contents capture the pointer, so
  * the globe stays draggable underneath the empty parts.
  *
@@ -24,6 +24,8 @@ export interface TopBarProps {
   environment: AppEnvironment | undefined;
   /** The search button. */
   search?: ReactNode;
+  /** The "Share this view" button. */
+  share?: ReactNode;
 }
 
 /**
@@ -32,7 +34,11 @@ export interface TopBarProps {
  * @example
  * <TopBar environment="test" search={<SearchTrigger onOpen={openSearch} />} />
  */
-export function TopBar({environment, search}: TopBarProps): React.JSX.Element {
+export function TopBar({
+  environment,
+  search,
+  share,
+}: TopBarProps): React.JSX.Element {
   return (
     <header className="pointer-events-none absolute inset-x-0 top-0 flex items-center gap-3 p-4">
       <div className="pointer-events-auto flex items-center gap-3 rounded-xl border border-panel-border bg-panel px-4 py-2 backdrop-blur-md">
@@ -49,6 +55,9 @@ export function TopBar({environment, search}: TopBarProps): React.JSX.Element {
       </div>
       {search !== undefined && (
         <div className="pointer-events-auto">{search}</div>
+      )}
+      {share !== undefined && (
+        <div className="pointer-events-auto">{share}</div>
       )}
     </header>
   );

@@ -9,6 +9,9 @@
  *   container element appears, and destroys both when it goes away.
  * - Effects push React props (cameras, visible categories, the selected
  *   camera, the point to fly to) into the pin layer whenever they change.
+ * - A share link's view is applied once, when the viewer is created, and
+ *   each time the camera stops moving its new view is reported back (for
+ *   the URL), so a link or a reload opens the same view.
  * - Cesium's loading progress becomes React state for the loading and error
  *   overlays.
  *
@@ -22,7 +25,7 @@
  */
 import 'cesium/Build/Cesium/Widgets/widgets.css';
 
-import type {Viewer} from 'cesium';
+import {Cartesian3, Math as CesiumMath, type Viewer} from 'cesium';
 import {useCallback, useEffect, useRef, useState} from 'react';
 
 import {parseClientConfig} from '@/client/lib/config';
@@ -30,6 +33,7 @@ import {cn} from '@/client/lib/utils';
 import type {CameraCategory, CameraIndexEntry} from '@/shared/cameras';
 
 import {createCameraLayer, type CameraLayer} from './camera_layer';
+import type {CameraView} from './camera_view';
 import {createGlobeViewer} from './create_globe_viewer';
 import {GlobeControls} from './globe_controls';
 
@@ -56,6 +60,13 @@ export interface GlobeViewProps {
   focus: GlobeFocus | null;
   /** The selected camera, whose pin is highlighted and never clustered. */
   selectedCameraId?: string | null;
+  /**
+   * Where the camera starts, for example from a share link. Read once,
+   * when the globe is created; `null` starts at Cesium's default view.
+   */
+  initialView?: CameraView | null;
+  /** Called with the camera's view each time it stops moving. */
+  onViewChange?: (view: CameraView) => void;
   /** Called with a camera's ID when its pin is clicked. */
   onSelectCamera: (cameraId: string) => void;
   /**
@@ -92,6 +103,8 @@ export function GlobeView({
   visibleCategories,
   focus,
   selectedCameraId = null,
+  initialView = null,
+  onViewChange,
   onSelectCamera,
   isDetailOpen,
   credits,
@@ -109,6 +122,13 @@ export function GlobeView({
   useEffect(() => {
     onSelectRef.current = onSelectCamera;
   }, [onSelectCamera]);
+  // Same for the view callback. The initial view is only read at creation,
+  // so it lives in a ref too, which keeps `attachGlobe` stable.
+  const onViewChangeRef = useRef(onViewChange);
+  useEffect(() => {
+    onViewChangeRef.current = onViewChange;
+  }, [onViewChange]);
+  const initialViewRef = useRef(initialView);
 
   // Stable across renders, so React attaches the globe once per element.
   const attachGlobe = useCallback((container: HTMLDivElement) => {
@@ -127,6 +147,34 @@ export function GlobeView({
     }
     setStatus('loading');
     viewerRef.current = viewer;
+
+    // Start where a share link (or the last visit's URL) says, then report
+    // every settled view so the URL can follow it.
+    const startView = initialViewRef.current;
+    if (startView !== null) {
+      viewer.camera.setView({
+        destination: Cartesian3.fromDegrees(
+          startView.lng,
+          startView.lat,
+          startView.height,
+        ),
+        orientation: {
+          heading: CesiumMath.toRadians(startView.heading),
+          pitch: CesiumMath.toRadians(startView.pitch),
+          roll: 0,
+        },
+      });
+    }
+    viewer.camera.moveEnd.addEventListener(() => {
+      const {longitude, latitude, height} = viewer.camera.positionCartographic;
+      onViewChangeRef.current?.({
+        lng: CesiumMath.toDegrees(longitude),
+        lat: CesiumMath.toDegrees(latitude),
+        height,
+        heading: CesiumMath.toDegrees(viewer.camera.heading),
+        pitch: CesiumMath.toDegrees(viewer.camera.pitch),
+      });
+    });
     layerRef.current = createCameraLayer(viewer, cameraId => {
       onSelectRef.current(cameraId);
     });
