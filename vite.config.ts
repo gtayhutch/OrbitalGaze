@@ -13,6 +13,9 @@
  * - In `pnpm dev`, Vite serves them straight from node_modules. (The
  *   Cloudflare plugin answers unknown paths with index.html, the
  *   single-page-app fallback, so the copy plugin can't serve them in dev.)
+ *
+ * Builds also remove the one `eval` call in Cesium's bundled Knockout, so the
+ * page never needs `'unsafe-eval'` (`scripts/cesium_no_eval_plugin.ts`).
  */
 import {cloudflare} from '@cloudflare/vite-plugin';
 import tailwindcss from '@tailwindcss/vite';
@@ -20,6 +23,8 @@ import react from '@vitejs/plugin-react';
 import {fileURLToPath} from 'node:url';
 import {defineConfig} from 'vite';
 import {viteStaticCopy} from 'vite-plugin-static-copy';
+
+import {cesiumNoEval} from './scripts/cesium_no_eval_plugin';
 
 /** Where Cesium's package keeps the prebuilt runtime files it loads at run time. */
 const CESIUM_SOURCE_DIRECTORY = 'node_modules/cesium/Build/Cesium';
@@ -32,6 +37,9 @@ export default defineConfig(({command}) => ({
     react(),
     tailwindcss(),
     cloudflare(),
+    // Removes the one eval call in Cesium's bundled Knockout, which our
+    // Content Security Policy doesn't allow; see the plugin's header.
+    cesiumNoEval(),
     viteStaticCopy({
       targets: ['Workers', 'ThirdParty', 'Assets', 'Widgets'].map(folder => ({
         src: `${CESIUM_SOURCE_DIRECTORY}/${folder}`,
