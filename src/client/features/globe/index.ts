@@ -3,7 +3,13 @@
  *
  * Layer: client feature (browser only).
  *
- * Other modules import the globe through this file only. Tests also mock this
- * file to replace the WebGL globe, which can't run in a simulated DOM.
+ * Everything that touches CesiumJS lives in this feature, so the app shell
+ * can load it lazily as one bundle. Tests mock this file to replace the WebGL
+ * globe, which can't run in a simulated DOM.
  */
-export {GlobeView, type GlobeStatus, type GlobeViewProps} from './globe_view';
+export {
+  GlobeView,
+  type GlobeFocus,
+  type GlobeStatus,
+  type GlobeViewProps,
+} from './globe_view';

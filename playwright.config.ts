@@ -39,9 +39,10 @@ export default defineConfig({
   ],
   webServer: {
     // Expects `pnpm build` to have run first (as `pnpm verify` does).
-    command: `pnpm exec vite preview --port ${PREVIEW_PORT} --strictPort`,
+    // Seeds the local database (synthetic cameras) before serving.
+    command: `pnpm db:seed && pnpm exec vite preview --port ${PREVIEW_PORT} --strictPort`,
     url: `http://localhost:${PREVIEW_PORT}`,
     reuseExistingServer: !IS_CI,
-    timeout: 60_000,
+    timeout: 120_000,
   },
 });
