@@ -19,6 +19,10 @@ const IS_CI = process.env['CI'] !== undefined;
 export default defineConfig({
   testDir: './tests/e2e',
   fullyParallel: true,
+  // Each test runs a WebGL globe in software and the local preview server
+  // serves every file; more than two at once overloads it (failed asset
+  // fetches), so parallelism is capped.
+  workers: 2,
   forbidOnly: IS_CI,
   retries: IS_CI ? 1 : 0,
   reporter: IS_CI ? [['list'], ['html', {open: 'never'}]] : 'list',

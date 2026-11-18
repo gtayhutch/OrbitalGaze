@@ -7,6 +7,8 @@
  * - Provides `window.matchMedia`, which jsdom lacks. It reports a wide
  *   screen (min-width queries match) and no reduced-motion preference, so
  *   panels render in their desktop layout by default.
+ * - Provides inert `ResizeObserver` and `scrollIntoView`, also missing from
+ *   jsdom, for the search list.
  * - Gives each test a fresh, empty in-memory `localStorage`.
  * - After each test: unmounts components and resets the URL, so tests don't
  *   affect each other.
@@ -64,8 +66,25 @@ class MemoryStorage implements Storage {
   }
 }
 
+/** A `ResizeObserver` that never reports; jsdom has no layout to observe. */
+class InertResizeObserver implements ResizeObserver {
+  observe(): void {
+    // jsdom has no layout, so there is never anything to report.
+  }
+  unobserve(): void {
+    // Nothing is tracked.
+  }
+  disconnect(): void {
+    // Nothing is tracked.
+  }
+}
+
 beforeEach(() => {
   window.matchMedia = fakeMediaQueryList;
+  // Used by the search list (cmdk) to size itself and keep the highlighted
+  // result in view; jsdom provides neither.
+  window.ResizeObserver = InertResizeObserver;
+  Element.prototype.scrollIntoView = () => undefined;
   Object.defineProperty(window, 'localStorage', {
     value: new MemoryStorage(),
     configurable: true,
