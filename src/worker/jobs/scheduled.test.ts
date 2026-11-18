@@ -74,10 +74,10 @@ describe('handleScheduled', () => {
         cron: DISPATCH_CRON,
         scheduledTime: Date.parse(`2026-11-19T04:${minute}:00Z`),
       });
-    await handleScheduled(tick('25'), envWithKey, {queue});
+    await handleScheduled(tick('25'), envWithKey, {queue, snapshotSources: []});
     expect(await env.CAMERA_INDEX.head(CAMERA_INDEX_OBJECT_KEY)).toBeNull();
 
-    await handleScheduled(tick('30'), envWithKey, {queue});
+    await handleScheduled(tick('30'), envWithKey, {queue, snapshotSources: []});
     expect(await env.CAMERA_INDEX.head(CAMERA_INDEX_OBJECT_KEY)).not.toBeNull();
     expect(queue.batches).toEqual([]);
   });
@@ -280,8 +280,8 @@ describe('handleScheduled: layer refresh', () => {
     ]);
   });
 
-  it('runs with the real, still empty, layer list', async () => {
-    await handleScheduled(refreshAt('10:05'), env);
+  it('has a defined outcome with an empty layer list', async () => {
+    await handleScheduled(refreshAt('10:05'), env, {snapshotSources: []});
 
     expect(logLines).toEqual([
       expect.objectContaining({message: 'layer refresh: no layers due'}),
