@@ -8,7 +8,7 @@
 import {z} from 'zod';
 
 /** Commit SHA injected by the Vite build in Workers Builds. */
-declare const ORBITALGAZE_RELEASE: string | undefined;
+declare const ORBITALGAZE_DEPLOY_REVISION: string;
 
 /** The content of a hosted project DSN, with no password or custom host. */
 export const SentryDsnSchema = z
@@ -63,9 +63,13 @@ interface DiagnosticEvent {
 
 /** Reads the build commit when running in a deployed build. */
 export function monitoringRelease(): string | undefined {
-  return typeof ORBITALGAZE_RELEASE === 'string'
-    ? ORBITALGAZE_RELEASE
-    : undefined;
+  if (
+    typeof ORBITALGAZE_DEPLOY_REVISION === 'string' &&
+    /^[a-f0-9]{40}$/.test(ORBITALGAZE_DEPLOY_REVISION)
+  ) {
+    return ORBITALGAZE_DEPLOY_REVISION;
+  }
+  return undefined;
 }
 
 /**

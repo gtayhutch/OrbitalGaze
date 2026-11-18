@@ -62,9 +62,6 @@ export default defineConfig(({command}) => ({
         ? `/${CESIUM_SOURCE_DIRECTORY}`
         : `/${CESIUM_BUILD_PATH}`,
     ),
-    ORBITALGAZE_RELEASE: JSON.stringify(
-      process.env['WORKERS_CI_COMMIT_SHA'] ?? null,
-    ),
     ORBITALGAZE_BUILD_ENVIRONMENT: JSON.stringify(
       process.env['CLOUDFLARE_ENV'] ?? 'test',
     ),
