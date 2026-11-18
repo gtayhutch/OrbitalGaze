@@ -23,6 +23,8 @@ import {
   Viewer,
 } from 'cesium';
 
+import {reportBrowserError} from '@/client/lib/error_reporting';
+
 import {attachRenderQuality} from './render_quality';
 
 /** How many times drawing restarts after a render error before giving up. */
@@ -140,6 +142,7 @@ export function createGlobeViewer(
   let restartsLeft = MAX_RENDER_RESTARTS;
   viewer.scene.renderError.addEventListener((_scene, error: unknown) => {
     console.error('The globe hit a rendering error.', error);
+    reportBrowserError('browser.globe-render', error);
     if (restartsLeft > 0) {
       restartsLeft -= 1;
       viewer.useDefaultRenderLoop = true;
