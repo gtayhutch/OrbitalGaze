@@ -29,6 +29,7 @@ import {Cartesian3, Math as CesiumMath, type Viewer} from 'cesium';
 import {useCallback, useEffect, useRef, useState} from 'react';
 
 import {parseClientConfig} from '@/client/lib/config';
+import {reportBrowserError} from '@/client/lib/error_reporting';
 import {cn} from '@/client/lib/utils';
 import type {CameraCategory, CameraIndexEntry} from '@/shared/cameras';
 
@@ -157,6 +158,7 @@ export function GlobeView({
       });
     } catch (error) {
       console.error('Could not start the globe.', error);
+      reportBrowserError('browser.globe-start', error);
       setStatus('error');
       return undefined;
     }

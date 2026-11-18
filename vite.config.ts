@@ -62,6 +62,9 @@ export default defineConfig(({command}) => ({
         ? `/${CESIUM_SOURCE_DIRECTORY}`
         : `/${CESIUM_BUILD_PATH}`,
     ),
+    ORBITALGAZE_BUILD_ENVIRONMENT: JSON.stringify(
+      process.env['CLOUDFLARE_ENV'] ?? 'test',
+    ),
   },
   build: {
     // CesiumJS is one ~4.5 MB chunk that can't be split further. It loads

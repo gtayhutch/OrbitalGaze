@@ -15,6 +15,34 @@ import {
   AppEnvironmentSchema,
   type AppEnvironment,
 } from '@/shared/app_environment';
+import {SentryDsnSchema} from '@/shared/monitoring';
+
+/** The project and environment used for Worker error reporting. */
+export interface WorkerMonitoringConfig {
+  /** The configured ingestion address for this environment. */
+  readonly dsn: string;
+  /** The hosted environment associated with the event. */
+  readonly environment: 'staging' | 'production';
+}
+
+/** Raw settings used only by the optional diagnostics integration. */
+const RawMonitoringSettingsSchema = z.object({
+  APP_ENV: z.enum(['staging', 'production']),
+  SENTRY_DSN: SentryDsnSchema,
+});
+
+/**
+ * Reads the optional hosted diagnostics settings. A missing or invalid DSN
+ * leaves diagnostics disabled and never fails an application request.
+ */
+export function parseWorkerMonitoringConfig(
+  env: unknown,
+): WorkerMonitoringConfig | undefined {
+  const parsed = RawMonitoringSettingsSchema.safeParse(env);
+  return parsed.success
+    ? {dsn: parsed.data.SENTRY_DSN, environment: parsed.data.APP_ENV}
+    : undefined;
+}
 
 /** The settings the Worker needs, after validation. */
 export interface WorkerConfig {
