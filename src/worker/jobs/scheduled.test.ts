@@ -20,6 +20,7 @@ import {
   UPSTREAM_MARKER,
 } from '../test_support/snapshot_fakes';
 import {
+  DISPATCH_CRON,
   handleScheduled,
   IMPORT_FINALIZE_CRON,
   IMPORT_PLAN_CRON,
@@ -46,6 +47,41 @@ const envWithKey: Env = {...env, WINDY_API_KEY: 'test-key'};
 const envWithoutKey: Env = {...env, WINDY_API_KEY: ''};
 
 describe('handleScheduled', () => {
+  it('uses a single tick for the nightly import and its due snapshots', async () => {
+    const queue = recordingQueue();
+    const source = buildFakeSnapshotSource();
+    const feed = fakeFeedServing([buildFakePoint()]);
+    await handleScheduled(
+      createScheduledController({
+        cron: DISPATCH_CRON,
+        scheduledTime: Date.parse('2026-11-19T03:00:00Z'),
+      }),
+      envWithKey,
+      {queue, snapshotSources: [source], fetch: feed.fetch},
+    );
+
+    expect(queue.batches).toHaveLength(1);
+    expect(queue.batches[0]).toHaveLength(21);
+    expect(
+      await env.LAYER_SNAPSHOTS.head(layerSnapshotKey(source.id)),
+    ).not.toBeNull();
+  });
+
+  it('only rebuilds the camera index at minute :30', async () => {
+    const queue = recordingQueue();
+    const tick = (minute: string) =>
+      createScheduledController({
+        cron: DISPATCH_CRON,
+        scheduledTime: Date.parse(`2026-11-19T04:${minute}:00Z`),
+      });
+    await handleScheduled(tick('25'), envWithKey, {queue});
+    expect(await env.CAMERA_INDEX.head(CAMERA_INDEX_OBJECT_KEY)).toBeNull();
+
+    await handleScheduled(tick('30'), envWithKey, {queue});
+    expect(await env.CAMERA_INDEX.head(CAMERA_INDEX_OBJECT_KEY)).not.toBeNull();
+    expect(queue.batches).toEqual([]);
+  });
+
   it('queues the nightly import in batches the queue accepts', async () => {
     const queue = recordingQueue();
 
