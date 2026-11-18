@@ -63,7 +63,7 @@ test('the app page carries the static security headers', async ({request}) => {
   expect(headers['x-content-type-options']).toBe('nosniff');
   expect(headers['x-frame-options']).toBe('DENY');
   expect(headers['referrer-policy']).toBe('strict-origin-when-cross-origin');
-  const csp = headers['content-security-policy-report-only'];
+  const csp = headers['content-security-policy'];
   expect(csp).toContain("frame-ancestors 'none'");
   // Windy images and players load only from Windy's own hosts.
   expect(csp).toContain('img-src');
@@ -74,12 +74,14 @@ test('the app page carries the static security headers', async ({request}) => {
   expect(csp).toContain(
     "script-src 'self' 'wasm-unsafe-eval' https://static.cloudflareinsights.com;",
   );
+  expect(csp).toContain('report-uri /api/v1/csp-reports');
 });
 
-test('loading the globe never evaluates strings as code', async ({page}) => {
+test('loading the globe causes no browser policy violations', async ({
+  page,
+}) => {
   // Step 1: record every Content Security Policy report from the very first
-  // script on. The policy is report-only, so a violation shows up only as
-  // this event, not as an error.
+  // script on. The event captures blocked loads as well as eval attempts.
   await page.addInitScript(() => {
     // The e2e project has no DOM types, so describe the bits used here.
     // Reports fired at the document bubble up to the window.
@@ -100,11 +102,31 @@ test('loading the globe never evaluates strings as code', async ({page}) => {
     timeout: GLOBE_READY_TIMEOUT_MS,
   });
 
-  // Step 3: no report may be about string evaluation (eval, new Function).
+  // Step 3: none of the app's startup behavior should violate the policy.
   const reports = await page.evaluate(
     () => (globalThis as unknown as CspRecordingWindow).cspReports,
   );
-  expect(reports.filter(report => report.endsWith(' eval'))).toEqual([]);
+  expect(reports).toEqual([]);
+});
+
+test('the browser blocks and reports inline scripts', async ({page}) => {
+  // Add a harmless inline script to the real HTML while preserving its
+  // headers. The browser must refuse the script and deliver its own report.
+  await page.route('**/', async route => {
+    const response = await route.fetch();
+    const body = (await response.text()).replace(
+      '</head>',
+      '<script>document.documentElement.dataset.inlineRan = "yes"</script></head>',
+    );
+    await route.fulfill({response, body});
+  });
+  const report = page.waitForResponse(response =>
+    response.url().endsWith('/api/v1/csp-reports'),
+  );
+
+  await page.goto('/');
+  await expect(page.locator('html')).not.toHaveAttribute('data-inline-ran');
+  expect((await report).status()).toBe(204);
 });
 
 test('the interface overlays have no detectable accessibility violations', async ({
