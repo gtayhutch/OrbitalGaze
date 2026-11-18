@@ -8,6 +8,8 @@
  * layer appears everywhere once it is added here. The order of the list is
  * the order layers appear within their panel group.
  */
+import {EARTHQUAKE_LAYER_ID} from '@/shared/earthquakes';
+
 import {
   LAYER_DOMAIN_LABELS,
   LAYER_DOMAINS,
@@ -37,6 +39,19 @@ export const LAYER_DEFINITIONS = [
       {text: 'add a webcam', href: WINDY_ADD_WEBCAM_URL},
     ],
     defaultOn: true,
+  },
+  {
+    id: EARTHQUAKE_LAYER_ID,
+    domain: 'earth',
+    label: 'Earthquakes',
+    summary: 'Earthquakes reported by USGS in the past 24 hours.',
+    attribution: [
+      {
+        text: 'USGS Earthquake Hazards Program',
+        href: 'https://earthquake.usgs.gov/',
+      },
+    ],
+    defaultOn: false,
   },
 ] as const satisfies readonly LayerDefinition[];
 

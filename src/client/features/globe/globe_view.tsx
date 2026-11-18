@@ -35,6 +35,7 @@ import type {CameraCategory, CameraIndexEntry} from '@/shared/cameras';
 import {createCameraLayer, type CameraLayer} from './camera_layer';
 import type {CameraView} from './camera_view';
 import {createGlobeViewer} from './create_globe_viewer';
+import {createEarthquakeLayer, type EarthquakeLayer} from './earthquake_layer';
 import {GlobeControls} from './globe_controls';
 
 /** Where the globe is in its lifecycle. */
@@ -50,10 +51,20 @@ export interface GlobeFocus {
   readonly lng: number;
 }
 
+import type {Earthquake} from '@/shared/earthquakes';
+
+/** A stable empty set of earthquake points for callers without the layer. */
+const NO_EARTHQUAKES: readonly Earthquake[] = [];
+
 /** Props for {@link GlobeView}. */
 export interface GlobeViewProps {
   /** Pins to draw. */
   cameras: readonly CameraIndexEntry[];
+  /** Earthquake points and their snapshot freshness, when the layer is on. */
+  earthquakes?: readonly Earthquake[];
+  earthquakeCheckedAt?: string | null;
+  /** Highlights the earthquake selected from the layer panel. */
+  selectedEarthquakeId?: string | null;
   /** Categories whose pins are shown. */
   visibleCategories: ReadonlySet<CameraCategory>;
   /** Where to fly, for example the selected camera; `null` stays put. */
@@ -100,6 +111,9 @@ export interface GlobeViewProps {
  */
 export function GlobeView({
   cameras,
+  earthquakes = NO_EARTHQUAKES,
+  earthquakeCheckedAt = null,
+  selectedEarthquakeId = null,
   visibleCategories,
   focus,
   selectedCameraId = null,
@@ -116,6 +130,7 @@ export function GlobeView({
   // before the globe container, so it exists when the viewer is created.
   const imageryCreditsRef = useRef<HTMLDivElement>(null);
   const layerRef = useRef<CameraLayer | null>(null);
+  const earthquakeLayerRef = useRef<EarthquakeLayer | null>(null);
   // The latest click handler, read when a pin is clicked, so the layer never
   // calls a stale one.
   const onSelectRef = useRef(onSelectCamera);
@@ -179,6 +194,8 @@ export function GlobeView({
       onSelectRef.current(cameraId);
     });
 
+    earthquakeLayerRef.current = createEarthquakeLayer(viewer);
+
     // Step 2: report "ready" after the first frame in which every visible
     // tile has loaded, then stop listening. Each finished tile requests a new
     // frame, so this check runs again until loading completes.
@@ -195,6 +212,7 @@ export function GlobeView({
       removeReadyListener();
       layerRef.current?.destroy();
       layerRef.current = null;
+      earthquakeLayerRef.current = null;
       viewerRef.current = null;
       if (!viewer.isDestroyed()) {
         viewer.destroy();
@@ -213,6 +231,13 @@ export function GlobeView({
   useEffect(() => {
     layerRef.current?.setSelected(selectedCameraId);
   }, [selectedCameraId]);
+  useEffect(() => {
+    earthquakeLayerRef.current?.update(
+      earthquakes,
+      earthquakeCheckedAt,
+      selectedEarthquakeId,
+    );
+  }, [earthquakes, earthquakeCheckedAt, selectedEarthquakeId]);
   // Callers keep `focus` referentially stable until the target changes (see
   // the `GlobeFocus` docs), so this flies once per new target.
   useEffect(() => {
@@ -240,7 +265,7 @@ export function GlobeView({
         ref={attachGlobe}
         className="h-full w-full"
         role="application"
-        aria-label="Interactive 3D globe. Drag to rotate; scroll or pinch to zoom. Use search or the layer panel for a list of cameras."
+        aria-label="Interactive 3D globe. Drag to rotate; scroll or pinch to zoom. Use search for cameras, or the layer panel for earthquake details."
       />
       {status === 'ready' && (
         <GlobeControls
