@@ -14,6 +14,7 @@ import type {RefObject} from 'react';
 import {Button} from '@/client/components/ui/button';
 import {prefersReducedMotion} from '@/client/lib/motion';
 import {cn} from '@/client/lib/utils';
+import {requestRender} from './request_render';
 
 /**
  * Fraction of the current height above ground that one zoom step moves.
@@ -55,7 +56,7 @@ export function GlobeControls({
     } else {
       viewer.camera.zoomOut(height * ZOOM_STEP_FRACTION);
     }
-    viewer.scene.requestRender();
+    requestRender(viewer);
   };
 
   /** Flies back to the starting whole-Earth view. */
