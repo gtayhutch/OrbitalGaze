@@ -54,13 +54,9 @@
   // WINDY_API_KEY is optional locally; without it the import jobs skip.
   "secrets": {"required": ["WINDY_API_KEY"]},
 
-  // Scheduled jobs (see src/worker/jobs/scheduled.ts). Times are UTC.
-  // Triggers are inherited by both hosted environments.
-  //   - 03:00 daily: queue the nightly Windy import, one message per page.
-  //   - :30 hourly: mark cameras that stopped appearing as offline and
-  //     rebuild the camera index file.
-  //   - every 5 minutes: refresh the snapshot layers that are due.
-  "triggers": {"crons": ["0 3 * * *", "30 * * * *", "*/5 * * * *"]},
+  // One trigger per environment keeps staging and production within the
+  // shared account quota. The Worker dispatches jobs by UTC time.
+  "triggers": {"crons": ["0-55/5 * * * *"]},
 
   // The import queue. One consumer at a time, ten pages per batch, keeps the
   // load on Windy's API gentle. Queues aren't inherited, so each
