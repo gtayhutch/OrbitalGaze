@@ -41,6 +41,7 @@ import {
   useCameraIndex,
   useCategoryFilter,
 } from '@/client/features/cameras';
+import {EarthquakeControls} from '@/client/features/earthquakes';
 import {CreditBar, LayerPanel, useActiveLayers} from '@/client/features/layers';
 import type {CameraView} from '@/client/features/globe';
 import {
@@ -57,6 +58,13 @@ import {
   ShareButton,
   VIEW_URL_PARAM,
 } from '@/client/features/share';
+import {useLayerSnapshot} from '@/client/lib/use_layer_snapshot';
+import {
+  EARTHQUAKE_LAYER_ID,
+  EARTHQUAKE_REFRESH_MINUTES,
+  EarthquakeSchema,
+  type Earthquake,
+} from '@/shared/earthquakes';
 import {useUrlParam} from '@/client/lib/use_url_param';
 import {
   CameraIdSchema,
@@ -79,6 +87,9 @@ export const CAMERA_URL_PARAM = 'camera';
 
 /** Shared empty list, so the globe doesn't redraw while the index loads. */
 const NO_CAMERAS: readonly CameraIndexEntry[] = [];
+
+/** Stable empty list while the earthquake layer is off or loading. */
+const NO_EARTHQUAKES: readonly Earthquake[] = [];
 
 /** Shared empty set: every webcam pin hidden while the layer is off. */
 const NO_CATEGORIES: ReadonlySet<CameraCategory> = new Set();
@@ -110,6 +121,40 @@ export function App(): React.JSX.Element {
     ? rawCameraId
     : null;
   const detail = useCameraDetail(selectedCameraId);
+  const showEarthquakes = activeLayers.active.has(EARTHQUAKE_LAYER_ID);
+  const earthquakeSnapshot = useLayerSnapshot(
+    EARTHQUAKE_LAYER_ID,
+    EarthquakeSchema,
+    EARTHQUAKE_REFRESH_MINUTES * 60_000,
+    showEarthquakes,
+  );
+  const [requestedQuake, setRequestedQuake] = useState<string | null>(null);
+  const earthquakes =
+    showEarthquakes && earthquakeSnapshot.status === 'ready'
+      ? earthquakeSnapshot.items
+      : NO_EARTHQUAKES;
+  const selectedQuake =
+    selectedCameraId === null
+      ? (earthquakes.find(event => event.id === requestedQuake) ?? null)
+      : null;
+
+  /** Selects a camera and clears the current earthquake focus. */
+  const selectCamera = useCallback(
+    (id: string) => {
+      setRequestedQuake(null);
+      setCameraId(id);
+    },
+    [setCameraId],
+  );
+
+  /** Selects a quake from its accessible list and dismisses any camera. */
+  const selectQuake = useCallback(
+    (id: string) => {
+      setCameraId(null);
+      setRequestedQuake(id);
+    },
+    [setCameraId],
+  );
 
   // The view in the URL: read once as the starting view, then rewritten
   // (without new history entries) each time the camera stops.
@@ -138,9 +183,9 @@ export function App(): React.JSX.Element {
   const selectSearchResult = useCallback(
     (cameraId: string) => {
       setLayerActive('webcams', true);
-      setCameraId(cameraId);
+      selectCamera(cameraId);
     },
-    [setLayerActive, setCameraId],
+    [setLayerActive, selectCamera],
   );
 
   // Search opens from the top bar button or Ctrl K / ⌘K.
@@ -153,8 +198,14 @@ export function App(): React.JSX.Element {
   // Fly to the selected camera once its details (and coordinates) arrive.
   // The object only changes when the coordinates do, so the globe flies once
   // per selection.
-  const focusLat = detail.status === 'ready' ? detail.camera.lat : null;
-  const focusLng = detail.status === 'ready' ? detail.camera.lng : null;
+  const focusLat =
+    detail.status === 'ready'
+      ? detail.camera.lat
+      : (selectedQuake?.lat ?? null);
+  const focusLng =
+    detail.status === 'ready'
+      ? detail.camera.lng
+      : (selectedQuake?.lng ?? null);
   const focus = useMemo(
     () =>
       focusLat === null || focusLng === null
@@ -182,9 +233,16 @@ export function App(): React.JSX.Element {
             visibleCategories={showWebcams ? filter.visible : NO_CATEGORIES}
             focus={focus}
             selectedCameraId={selectedCameraId}
+            earthquakes={earthquakes}
+            earthquakeCheckedAt={
+              earthquakeSnapshot.status === 'ready'
+                ? earthquakeSnapshot.checkedAt
+                : null
+            }
+            selectedEarthquakeId={selectedQuake?.id ?? null}
             initialView={initialView}
             onViewChange={recordView}
-            onSelectCamera={setCameraId}
+            onSelectCamera={selectCamera}
             isDetailOpen={detail.status !== 'idle'}
             credits={<CreditBar active={activeLayers.active} />}
           />
@@ -198,6 +256,13 @@ export function App(): React.JSX.Element {
           activeLayers={activeLayers}
           layerControls={{
             webcams: <CameraLayerControls index={index} filter={filter} />,
+            [EARTHQUAKE_LAYER_ID]: (
+              <EarthquakeControls
+                snapshot={earthquakeSnapshot}
+                selected={selectedQuake}
+                onSelect={selectQuake}
+              />
+            ),
           }}
           className="absolute top-24 left-4"
         />

@@ -244,8 +244,8 @@ describe('handleScheduled: layer refresh', () => {
     ]);
   });
 
-  it('runs with the real, still empty, layer list', async () => {
-    await handleScheduled(refreshAt('10:05'), env);
+  it('has a defined outcome with an empty layer list', async () => {
+    await handleScheduled(refreshAt('10:05'), env, {snapshotSources: []});
 
     expect(logLines).toEqual([
       expect.objectContaining({message: 'layer refresh: no layers due'}),
