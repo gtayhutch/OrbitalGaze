@@ -22,6 +22,8 @@
   // The runtime behavior date. Advancing it is a deliberate change made in
   // its own pull request, with the full test suite run.
   "compatibility_date": "2026-11-17",
+  // The diagnostics SDK uses Node's AsyncLocalStorage for request isolation.
+  "compatibility_flags": ["nodejs_compat"],
 
   "assets": {
     // Unknown paths return index.html so the client-side app can route them.
