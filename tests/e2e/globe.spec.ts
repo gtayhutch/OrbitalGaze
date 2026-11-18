@@ -14,6 +14,17 @@ import {expect, test} from '@playwright/test';
 /** How long the globe may take to finish loading its first tiles, in milliseconds. */
 const GLOBE_READY_TIMEOUT_MS = 30_000;
 
+/** The page's window, as the CSP report test uses it inside the browser. */
+interface CspRecordingWindow {
+  /** Each report as "<directive> <blocked URI>", e.g. "script-src eval". */
+  cspReports: string[];
+  /** The window's `addEventListener`, narrowed to CSP reports. */
+  addEventListener(
+    type: 'securitypolicyviolation',
+    listener: (event: {effectiveDirective: string; blockedURI: string}) => void,
+  ): void;
+}
+
 test('the globe renders and reports ready', async ({page}) => {
   await page.goto('/');
 
@@ -58,6 +69,37 @@ test('the app page carries the static security headers', async ({request}) => {
   expect(csp).toContain('img-src');
   expect(csp).toContain('https://imgproxy.windy.com');
   expect(csp).toContain('frame-src https://webcams.windy.com;');
+});
+
+test('loading the globe never evaluates strings as code', async ({page}) => {
+  // Step 1: record every Content Security Policy report from the very first
+  // script on. The policy is report-only, so a violation shows up only as
+  // this event, not as an error.
+  await page.addInitScript(() => {
+    // The e2e project has no DOM types, so describe the bits used here.
+    // Reports fired at the document bubble up to the window.
+    const browserWindow = globalThis as unknown as CspRecordingWindow;
+    browserWindow.cspReports = [];
+    browserWindow.addEventListener('securitypolicyviolation', event => {
+      browserWindow.cspReports.push(
+        `${event.effectiveDirective} ${event.blockedURI}`,
+      );
+    });
+  });
+
+  // Step 2: load the page and let the globe and the camera index finish.
+  // That loads all of Cesium and parses API responses with Zod, the two
+  // places that used to evaluate strings.
+  await page.goto('/');
+  await expect(page.locator('[data-globe-status="ready"]')).toBeVisible({
+    timeout: GLOBE_READY_TIMEOUT_MS,
+  });
+
+  // Step 3: no report may be about string evaluation (eval, new Function).
+  const reports = await page.evaluate(
+    () => (globalThis as unknown as CspRecordingWindow).cspReports,
+  );
+  expect(reports.filter(report => report.endsWith(' eval'))).toEqual([]);
 });
 
 test('the interface overlays have no detectable accessibility violations', async ({
