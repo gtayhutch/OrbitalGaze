@@ -2,7 +2,7 @@
  * @fileoverview Keyboard-accessible list and details for the earthquake layer.
  * The globe uses the same snapshot, so the list works without WebGL or a mouse.
  */
-import {useId} from 'react';
+import {useId, useState} from 'react';
 
 import {FreshnessChip} from '@/client/features/layers';
 import type {LayerSnapshotState} from '@/client/lib/use_layer_snapshot';
@@ -47,6 +47,7 @@ export function EarthquakeControls({
   onSelect,
 }: EarthquakeControlsProps): React.JSX.Element {
   const detailId = useId();
+  const [requestedPage, setRequestedPage] = useState(0);
   if (snapshot.status === 'loading') {
     return <p role="status">Loading recent earthquakes…</p>;
   }
@@ -54,7 +55,13 @@ export function EarthquakeControls({
     return <p role="status">Earthquake data is temporarily unavailable.</p>;
   }
 
-  const shown = snapshot.items.slice(0, MAX_LIST_ITEMS);
+  const lastPage = Math.max(
+    0,
+    Math.ceil(snapshot.items.length / MAX_LIST_ITEMS) - 1,
+  );
+  const page = Math.min(requestedPage, lastPage);
+  const start = page * MAX_LIST_ITEMS;
+  const shown = snapshot.items.slice(start, start + MAX_LIST_ITEMS);
   return (
     <div className="space-y-2 text-xs">
       <FreshnessChip
@@ -67,8 +74,9 @@ export function EarthquakeControls({
       ) : (
         <>
           <p>
-            Showing {shown.length} of {snapshot.items.length}. Larger points
-            represent stronger earthquakes. Amber points are from the last hour.
+            Showing {start + 1}–{start + shown.length} of{' '}
+            {snapshot.items.length}. Larger points represent stronger
+            earthquakes. Amber points are from the last hour.
           </p>
           <ul
             aria-label="Recent earthquakes"
@@ -91,6 +99,30 @@ export function EarthquakeControls({
               </li>
             ))}
           </ul>
+          {lastPage > 0 && (
+            <div className="flex gap-2">
+              <button
+                type="button"
+                className="min-h-8 rounded border px-2 disabled:opacity-50"
+                disabled={page === 0}
+                onClick={() => {
+                  setRequestedPage(page - 1);
+                }}
+              >
+                Newer earthquakes
+              </button>
+              <button
+                type="button"
+                className="min-h-8 rounded border px-2 disabled:opacity-50"
+                disabled={page >= lastPage}
+                onClick={() => {
+                  setRequestedPage(page + 1);
+                }}
+              >
+                Older earthquakes
+              </button>
+            </div>
+          )}
         </>
       )}
       <div id={detailId} aria-live="polite">
