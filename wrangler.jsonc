@@ -55,10 +55,12 @@
   "secrets": {"required": ["WINDY_API_KEY"]},
 
   // Scheduled jobs (see src/worker/jobs/scheduled.ts). Times are UTC.
+  // Triggers are inherited by both hosted environments.
   //   - 03:00 daily: queue the nightly Windy import, one message per page.
   //   - :30 hourly: mark cameras that stopped appearing as offline and
   //     rebuild the camera index file.
-  "triggers": {"crons": ["0 3 * * *", "30 * * * *"]},
+  //   - every 5 minutes: refresh the snapshot layers that are due.
+  "triggers": {"crons": ["0 3 * * *", "30 * * * *", "*/5 * * * *"]},
 
   // The import queue. One consumer at a time, ten pages per batch, keeps the
   // load on Windy's API gentle. Queues aren't inherited, so each
@@ -77,11 +79,18 @@
     ],
   },
 
-  // Holds the prebuilt camera index file the globe loads.
+  // CAMERA_INDEX holds the prebuilt camera index file the globe loads.
+  // LAYER_SNAPSHOTS holds one snapshot file per map layer
+  // (layers/<id>/v1.json), rewritten by the layer refresh job. R2 bindings
+  // aren't inherited, so each environment repeats them.
   "r2_buckets": [
     {
       "binding": "CAMERA_INDEX",
       "bucket_name": "orbitalgaze-camera-index-local",
+    },
+    {
+      "binding": "LAYER_SNAPSHOTS",
+      "bucket_name": "orbitalgaze-layer-snapshots-local",
     },
   ],
 
@@ -128,6 +137,10 @@
         {
           "binding": "CAMERA_INDEX",
           "bucket_name": "orbitalgaze-camera-index-staging",
+        },
+        {
+          "binding": "LAYER_SNAPSHOTS",
+          "bucket_name": "orbitalgaze-layer-snapshots-staging",
         },
       ],
       "ratelimits": [
@@ -178,6 +191,10 @@
         {
           "binding": "CAMERA_INDEX",
           "bucket_name": "orbitalgaze-camera-index-production",
+        },
+        {
+          "binding": "LAYER_SNAPSHOTS",
+          "bucket_name": "orbitalgaze-layer-snapshots-production",
         },
       ],
       "ratelimits": [

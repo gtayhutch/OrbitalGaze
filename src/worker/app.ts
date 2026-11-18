@@ -26,6 +26,11 @@ import {Hono, type MiddlewareHandler} from 'hono';
 import type {AppContext} from './app_context';
 import {cameraRoutes} from './features/cameras';
 import {healthRoutes} from './features/health';
+import {
+  createLayerRoutes,
+  SNAPSHOT_SOURCES,
+  type SnapshotSource,
+} from './features/layers';
 import {parseWorkerConfig} from './lib/config';
 import {AppError, buildErrorBody} from './lib/errors';
 import {createLogger} from './lib/logger';
@@ -81,15 +86,25 @@ const loadConfig: MiddlewareHandler<AppContext> = async (c, next) => {
   await next();
 };
 
+/** Options for {@link createApp}; production uses the defaults. */
+export interface AppOptions {
+  /**
+   * The snapshot layers served under `/api/v1/layers`. Defaults to
+   * `SNAPSHOT_SOURCES`; tests pass fake layers.
+   */
+  readonly snapshotSources?: readonly SnapshotSource[];
+}
+
 /**
  * Builds the API application.
  *
+ * @param options Overrides for tests; production passes none.
  * @returns A Hono app that handles every path under `/api`.
  * @example
  * const app = createApp();
  * const response = await app.request('/api/v1/health', {}, env);
  */
-export function createApp(): Hono<AppContext> {
+export function createApp(options: AppOptions = {}): Hono<AppContext> {
   const app = new Hono<AppContext>().basePath('/api');
 
   // The middleware chain, in the order described in the file header.
@@ -103,6 +118,10 @@ export function createApp(): Hono<AppContext> {
   // Routes. Each feature exposes a router through its index.ts.
   app.route('/v1/health', healthRoutes);
   app.route('/v1/cameras', cameraRoutes);
+  app.route(
+    '/v1/layers',
+    createLayerRoutes(options.snapshotSources ?? SNAPSHOT_SOURCES),
+  );
 
   app.notFound(c =>
     c.json(
