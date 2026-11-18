@@ -166,6 +166,9 @@ importers:
 
   .:
     dependencies:
+      '@photostructure/tz-lookup':
+        specifier: ^11.8.0
+        version: 11.8.0
       cesium:
         specifier: ^1.147.0
         version: 1.147.0
@@ -929,6 +932,9 @@ packages:
 
   '@oxc-project/types@0.156.0':
     resolution: {integrity: sha512-1Duyg48TdJNdyhEB8Xn1L36bT9Pv6GUtlKjHxOys8xkaF/rQq3XJE+bAurSK/AgIz5mGFsb77cn9Pb20+WCScw==}
+
+  '@photostructure/tz-lookup@11.8.0':
+    resolution: {integrity: sha512-RvTkAjjWAfgvoaHVXugwi9XOw4rwyrL8wuqox4PwRLW9FZwpmPhNUY31MgY7k5avK6sbD9S7i1/rUtM4A310/g==}
 
   '@pkgr/core@0.3.6':
     resolution: {integrity: sha512-SEeaJLb3qBNF/OaXnaR1NmmBbFYk1zC0ZH/52fATcRPLFg/p791YrcyFFy44Bo9sLaGuSuLp5Q6axbb/O+v/RA==}
@@ -4501,6 +4507,8 @@ snapshots:
       fastq: 1.20.3
 
   '@oxc-project/types@0.156.0': {}
+
+  '@photostructure/tz-lookup@11.8.0': {}
 
   '@pkgr/core@0.3.6': {}
 

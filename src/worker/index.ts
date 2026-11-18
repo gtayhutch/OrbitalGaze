@@ -3,15 +3,19 @@
  *
  * Layer: worker (server only). Named as `main` in wrangler.jsonc.
  *
- * Cloudflare calls the handlers on this module's default export. Only
- * `/api/*` requests reach `fetch`; all other paths are served as static files
- * before any Worker code runs. Scheduled jobs and queue consumers will be
- * added here as `scheduled` and `queue` handlers that call into `jobs/`.
+ * Cloudflare calls the handlers on this module's default export:
+ * - `fetch`: only `/api/*` requests reach it; all other paths are served as
+ *   static files before any Worker code runs.
+ * - `scheduled`: the cron triggers (the camera import plan and finish
+ *   steps), handled in `jobs/scheduled.ts`.
+ * - `queue`: the camera import queue, handled in `jobs/ingest_queue.ts`.
  *
  * The app is created once per isolate and reused across requests. It holds
  * no per-request state, so reuse is safe.
  */
 import {createApp} from './app';
+import {handleIngestBatch} from './jobs/ingest_queue';
+import {handleScheduled} from './jobs/scheduled';
 
 /** The API application, shared by every request this isolate handles. */
 const app = createApp();
@@ -19,4 +23,10 @@ const app = createApp();
 // Workers require a default export; this is the one place it's used for that.
 export default {
   fetch: app.fetch,
+  scheduled: async (controller, env) => {
+    await handleScheduled(controller, env);
+  },
+  queue: async (batch, env) => {
+    await handleIngestBatch(batch, env);
+  },
 } satisfies ExportedHandler<Env>;

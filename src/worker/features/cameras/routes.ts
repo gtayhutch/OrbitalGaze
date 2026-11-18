@@ -3,10 +3,12 @@
  *
  * Layer: worker routes (server only).
  *
- * - `GET /index`: every online camera's pin data for the globe. The same
- *   for every visitor, so it is cached: browsers and the edge keep it for
- *   five minutes, and the Worker also keeps a copy in Cloudflare's cache, so
- *   the database is read at most once per five minutes per location.
+ * - `GET /index`: every online camera's pin data for the globe. It comes
+ *   from the index file the import job writes to R2, or from the database
+ *   when there is no file yet. The same for every visitor, so it is cached:
+ *   browsers and the edge keep it for five minutes, and the Worker also keeps
+ *   a copy in Cloudflare's cache, so storage is read at most once per five
+ *   minutes per location.
  * - `GET /search?q=`: full-text search, at most 20 results.
  * - `GET /:id`: one camera for the detail panel. Unknown and hidden cameras
  *   both answer 404, so a hidden camera's existence isn't revealed.
@@ -27,6 +29,7 @@ import {
 import type {AppContext} from '../../app_context';
 import {AppError} from '../../lib/errors';
 import {parseInput} from '../../lib/validation';
+import {CAMERA_INDEX_OBJECT_KEY} from './ingest_service';
 import {createCameraRepository} from './repository';
 import {toFtsQuery} from './search_query';
 
@@ -71,13 +74,21 @@ export const cameraRoutes = new Hono<AppContext>()
       });
     }
 
-    // Step 2: build the index from the database.
-    const cameras = createCameraRepository(c.env.DB);
-    const index: CameraIndex = {
-      generatedAt: new Date().toISOString(),
-      cameras: await cameras.listIndexEntries(),
-    };
-    const body = JSON.stringify({data: index});
+    // Step 2: use the prebuilt index file the import job keeps in R2. If
+    // it doesn't exist yet (a fresh database, or local synthetic data), build
+    // the index from the database instead.
+    const prebuilt = await c.env.CAMERA_INDEX.get(CAMERA_INDEX_OBJECT_KEY);
+    let body: string;
+    if (prebuilt !== null) {
+      body = await prebuilt.text();
+    } else {
+      const cameras = createCameraRepository(c.env.DB);
+      const index: CameraIndex = {
+        generatedAt: new Date().toISOString(),
+        cameras: await cameras.listIndexEntries(),
+      };
+      body = JSON.stringify({data: index});
+    }
 
     // Step 3: store a copy for the next visitor without delaying this one.
     c.executionCtx.waitUntil(

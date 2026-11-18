@@ -13,3 +13,12 @@ export {
   type NewCamera,
   type NewSource,
 } from './repository';
+export {
+  CAMERA_INDEX_OBJECT_KEY,
+  finalizeImport,
+  importWindyPage,
+  IngestMessageSchema,
+  planWindyImport,
+  type IngestMessage,
+} from './ingest_service';
+export {createWindyClient, isWindyKeyRejected} from './sources/windy/client';
