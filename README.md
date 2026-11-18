@@ -3,52 +3,58 @@
 OrbitalGaze ([orbitalgaze.com](https://orbitalgaze.com)) is an interactive 3D
 globe for exploring the world through public webcams. Spin the Earth, zoom in
 anywhere, and watch scenic, weather, traffic, and wildlife cameras that their
-operators publish for public viewing. Satellite, flight-path, and weather
-layers are planned.
+operators publish for public viewing. Turn on the earthquake layer to explore
+USGS events from the past 24 hours. Satellite, flight-path, and weather layers
+are planned.
 
 ## Running it locally
 
-Prerequisites: Node.js (the version in `.nvmrc`) and pnpm (enable with
-`corepack enable`). No Cloudflare account is needed. The database, file
-storage, and queues all run locally.
+Use Node.js 26 (see `.nvmrc`) and pnpm 12.18.0 (see `package.json`). The
+database, object storage, and queues run locally without a Cloudflare account.
 
 ```bash
 pnpm install     # install dependencies
 pnpm dev         # start the app at http://localhost:5173
-pnpm verify      # formatting, linting, type checks, and all tests
+pnpm verify      # formatting, linting, type checking, build, and tests
 ```
 
-The local environment uses its own sample data and can't reach the hosted
-staging or production environments.
+`pnpm db:seed` loads sample cameras into the local database. Type checks use
+the TypeScript 7.0.2 compiler. Type-aware ESLint rules use the TypeScript 6.0.3
+compiler API through Microsoft's compatibility package.
 
 ## How it's built
 
-| Part                | Technology                                                 |
-| ------------------- | ---------------------------------------------------------- |
-| Globe and interface | TypeScript, React, Vite, CesiumJS, Tailwind CSS, shadcn/ui |
-| API and edge logic  | Hono on Cloudflare Workers                                 |
-| Data                | Cloudflare D1 (SQLite) and R2                              |
-| Background jobs     | Cloudflare Cron Triggers and Queues                        |
-| Tests               | Vitest, Playwright                                         |
+| Part                | Technology                                     |
+| ------------------- | ---------------------------------------------- |
+| Globe and interface | React, Vite, CesiumJS, Tailwind CSS, shadcn/ui |
+| API and edge logic  | Hono on Cloudflare Workers                     |
+| Data                | Cloudflare D1 (SQLite) and R2                  |
+| Background jobs     | Cloudflare Cron Triggers and Queues            |
+| Tests               | Vitest, Playwright                             |
 
 Source layout:
 
-| Path          | Contents                                                       |
-| ------------- | -------------------------------------------------------------- |
-| `src/client/` | The browser app: globe, camera player, search, and filters     |
-| `src/worker/` | The Cloudflare Worker: API routes, feed proxy, scheduled jobs  |
-| `src/shared/` | Types, validation schemas, and pure helpers used by both sides |
-| `migrations/` | Database schema migrations                                     |
-| `tests/`      | End-to-end tests                                               |
+| Path          | Contents                                                           |
+| ------------- | ------------------------------------------------------------------ |
+| `src/client/` | Globe, webcam player and search, earthquake layer, and share links |
+| `src/worker/` | API routes, camera ingestion, and earthquake snapshot jobs         |
+| `src/shared/` | Types, validation schemas, and pure helpers used by both sides     |
+| `migrations/` | Database schema migrations                                         |
+| `tests/`      | End-to-end tests                                                   |
 
 Every source file begins with a comment explaining its role, and every
 function and component is documented where it's defined.
 
-## Camera sources
+## Data sources
 
-OrbitalGaze shows only cameras whose operators publish them for public
-viewing, under each source's terms and attribution requirements. Camera
-operators who want a feed removed can open an issue.
+- [Windy Webcams](https://www.windy.com/) provides the public webcam catalog,
+  images, and opt-in player embeds. Camera operators who want a feed removed
+  can open an issue.
+- The [USGS Earthquake Hazards Program](https://earthquake.usgs.gov/) provides
+  earthquake data. The layer shows magnitude, depth, local event time, and
+  attribution.
+- [Cesium ion](https://cesium.com/ion/) supplies hosted globe imagery. Local
+  builds use the bundled Natural Earth II imagery when an ion token is absent.
 
 ## License
 
