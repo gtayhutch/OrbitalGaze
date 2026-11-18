@@ -33,7 +33,8 @@ export const cspReportRoutes = new Hono<AppContext>().post(
     let data: unknown;
     try {
       const bytes = await c.req.raw.arrayBuffer();
-      data = JSON.parse(new TextDecoder('utf-8', {fatal: true}).decode(bytes));
+      const decoder = new TextDecoder('utf-8', {fatal: true, ignoreBOM: false});
+      data = JSON.parse(decoder.decode(bytes));
     } catch {
       throw new AppError('INVALID_INPUT', 'Malformed policy report.');
     }
