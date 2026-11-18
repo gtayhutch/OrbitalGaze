@@ -1,0 +1,9 @@
+// Markdown lint settings. README.md is the only Markdown file in the repo.
+{
+  "config": {
+    "default": true,
+    // Long lines are fine; prose wraps in editors.
+    "MD013": false,
+  },
+  "globs": ["README.md"],
+}

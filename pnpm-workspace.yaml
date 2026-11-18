@@ -1,0 +1,5 @@
+# Lets pnpm run the install scripts these packages need: esbuild and workerd
+# download their platform-specific binaries during install.
+allowBuilds:
+  esbuild: true
+  workerd: true

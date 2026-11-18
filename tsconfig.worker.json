@@ -1,0 +1,12 @@
+{
+  // The Cloudflare Worker. Runtime and binding types come from the generated
+  // worker-configuration.d.ts (re-run `pnpm cf-typegen` after editing
+  // wrangler.jsonc). No DOM types: the Worker isn't a browser.
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "tsBuildInfoFile": "./node_modules/.cache/tsc/worker.tsbuildinfo",
+    "lib": ["ES2024"],
+    "types": ["@cloudflare/vitest-plugin/types"]
+  },
+  "include": ["src/worker", "src/shared", "worker-configuration.d.ts"]
+}

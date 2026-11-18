@@ -1,0 +1,34 @@
+# Static security analysis of the TypeScript and JavaScript code with CodeQL.
+# Results appear in the repository's Security tab. Branch protection requires
+# the `codeql` job to pass.
+name: CodeQL
+
+on:
+  pull_request:
+    branches: [test, staging, production]
+  push:
+    branches: [test, staging, production]
+  schedule:
+    # Weekly, so newly published queries also run against unchanged code.
+    - cron: '23 6 * * 1'
+
+permissions:
+  contents: read
+
+jobs:
+  codeql:
+    name: codeql
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: github/codeql-action/init@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+        with:
+          languages: javascript-typescript
+          queries: security-extended
+      - uses: github/codeql-action/analyze@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3

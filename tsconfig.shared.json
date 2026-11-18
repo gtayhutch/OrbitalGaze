@@ -1,0 +1,11 @@
+{
+  // Code shared by the client and the Worker. It may use only standard
+  // JavaScript, so it runs unchanged on both sides.
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "tsBuildInfoFile": "./node_modules/.cache/tsc/shared.tsbuildinfo",
+    "lib": ["ES2024"],
+    "types": []
+  },
+  "include": ["src/shared"]
+}
