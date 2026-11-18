@@ -8,8 +8,8 @@
  * which count requests per key at the edge without a database. Routes fall
  * into groups with their own budgets:
  *
- * - `search`: full-text search is the most expensive query, so it gets the
- *   smallest budget (SEARCH_RATE_LIMITER, 30 requests per minute).
+ * - `search` and `csp-report`: separate budgets of 30 requests per minute,
+ *   both backed by SEARCH_RATE_LIMITER with distinct keys.
  * - `api`: everything else (API_RATE_LIMITER, 300 requests per minute).
  *
  * The key is the visitor's IP address as reported by Cloudflare in
@@ -27,10 +27,13 @@ import {buildErrorBody} from './errors';
 export const RATE_LIMIT_RETRY_AFTER_SECONDS = 60;
 
 /** Which budget a request counts against. */
-export type RateLimitGroup = 'search' | 'api';
+export type RateLimitGroup = 'search' | 'csp-report' | 'api';
 
 /** Path prefix of the search endpoint, which has its own smaller budget. */
 const SEARCH_PATH_PREFIX = '/api/v1/cameras/search';
+
+/** The browser's endpoint for reporting a policy violation. */
+const CSP_REPORT_PATH = '/api/v1/csp-reports';
 
 /**
  * Picks the budget for a request path.
@@ -39,6 +42,9 @@ const SEARCH_PATH_PREFIX = '/api/v1/cameras/search';
  * @returns The group whose limit applies.
  */
 export function rateLimitGroupFor(path: string): RateLimitGroup {
+  if (path === CSP_REPORT_PATH) {
+    return 'csp-report';
+  }
   return path.startsWith(SEARCH_PATH_PREFIX) ? 'search' : 'api';
 }
 
@@ -52,7 +58,7 @@ export const rateLimit: MiddlewareHandler<AppContext> = async (c, next) => {
   const group = rateLimitGroupFor(c.req.path);
   const clientAddress = c.req.header('CF-Connecting-IP') ?? 'local';
   const limiter =
-    group === 'search' ? c.env.SEARCH_RATE_LIMITER : c.env.API_RATE_LIMITER;
+    group === 'api' ? c.env.API_RATE_LIMITER : c.env.SEARCH_RATE_LIMITER;
 
   const {success} = await limiter.limit({key: `${group}:${clientAddress}`});
   if (!success) {
