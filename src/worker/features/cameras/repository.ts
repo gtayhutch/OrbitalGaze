@@ -114,7 +114,33 @@ export interface CameraRepository {
    * @returns How many cameras were marked offline.
    */
   markStaleOffline(sourceId: string, before: string): Promise<number>;
+  /**
+   * Where a public camera's feed comes from, for the server's feed lookup.
+   * Server-only: the result holds `streamRef` and must never be sent to a
+   * browser as is.
+   *
+   * @returns `null` if the camera doesn't exist, is hidden, or has no feed.
+   */
+  findFeedReference(id: string): Promise<FeedReference | null>;
 }
+
+/** Where one camera's feed comes from. Server-only. */
+export interface FeedReference {
+  readonly sourceId: string;
+  readonly streamType: 'hls' | 'youtube' | 'embed' | 'snapshot';
+  /** The provider's ID or URL for the feed. Never sent to browsers. */
+  readonly streamRef: string;
+  /** Hosts the source's links may point at. */
+  readonly allowedHosts: readonly string[];
+}
+
+/** Row shape for the feed lookup. */
+const FeedReferenceRowSchema = z.object({
+  sourceId: z.string(),
+  streamType: z.enum(['hls', 'youtube', 'embed', 'snapshot']),
+  streamRef: z.string(),
+  allowedHosts: z.string(),
+});
 
 /** Row shape for the searchable fields of cameras being upserted. */
 const SearchableRowSchema = z.object({
@@ -445,6 +471,34 @@ export function createCameraRepository(db: D1Database): CameraRepository {
         .bind(sourceId, before, MAX_STALE_SWEEP)
         .run();
       return result.meta.changes;
+    },
+
+    async findFeedReference(id) {
+      const row = await db
+        .prepare(
+          `SELECT c.sourceId, c.streamType, c.streamRef, s.allowedHosts
+           FROM cameras AS c
+           JOIN sources AS s ON s.id = c.sourceId
+           WHERE c.id = ? AND c.status != 'hidden'
+             AND c.streamType IS NOT NULL AND c.streamRef IS NOT NULL
+           LIMIT 1`,
+        )
+        .bind(id)
+        .first();
+      if (row === null) {
+        return null;
+      }
+      const parsed = FeedReferenceRowSchema.parse(row);
+      return {
+        sourceId: parsed.sourceId,
+        streamType: parsed.streamType,
+        streamRef: parsed.streamRef,
+        // Stored as a JSON array (checked by the migration); validated again
+        // here because it decides which links reach browsers.
+        allowedHosts: z
+          .array(z.string())
+          .parse(JSON.parse(parsed.allowedHosts) as unknown),
+      };
     },
   };
 }

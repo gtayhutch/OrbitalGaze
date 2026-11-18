@@ -12,6 +12,11 @@
  * - Cesium's loading progress becomes React state for the loading and error
  *   overlays.
  *
+ * Credits: Cesium writes the imagery credits into a strip this component
+ * owns (instead of the bottom of its canvas), next to any extra credits the
+ * app passes in, so the whole strip stays visible above the phone bottom
+ * sheet.
+ *
  * The component's status is also exposed as `data-globe-status` on its root
  * element ("loading", "ready", or "error"), which the end-to-end tests wait on.
  */
@@ -51,8 +56,14 @@ export interface GlobeViewProps {
   focus: GlobeFocus | null;
   /** Called with a camera's ID when its pin is clicked. */
   onSelectCamera: (cameraId: string) => void;
-  /** True while the detail panel covers the right side (moves the controls). */
+  /**
+   * True while the detail panel is open: it covers the right side on wide
+   * screens (the controls move left) and the bottom on phones (the credits
+   * move above it).
+   */
   isDetailOpen: boolean;
+  /** Extra credits shown beside the imagery credits, such as the webcam provider's. */
+  credits?: React.ReactNode;
   /** Extra classes for the root element, usually for positioning. */
   className?: string;
 }
@@ -77,10 +88,14 @@ export function GlobeView({
   focus,
   onSelectCamera,
   isDetailOpen,
+  credits,
   className,
 }: GlobeViewProps): React.JSX.Element {
   const [status, setStatus] = useState<GlobeStatus>('loading');
   const viewerRef = useRef<Viewer | null>(null);
+  // Cesium writes its imagery credits into this element. It is rendered
+  // before the globe container, so it exists when the viewer is created.
+  const imageryCreditsRef = useRef<HTMLDivElement>(null);
   const layerRef = useRef<CameraLayer | null>(null);
   // The latest click handler, read when a pin is clicked, so the layer never
   // calls a stale one.
@@ -95,7 +110,10 @@ export function GlobeView({
     // unavailable, which the error overlay explains to the user.
     let viewer: Viewer;
     try {
-      viewer = createGlobeViewer(container, parseClientConfig());
+      viewer = createGlobeViewer(container, {
+        ...parseClientConfig(),
+        creditContainer: imageryCreditsRef.current ?? undefined,
+      });
     } catch (error) {
       console.error('Could not start the globe.', error);
       setStatus('error');
@@ -148,6 +166,23 @@ export function GlobeView({
 
   return (
     <div className={cn('bg-background', className)} data-globe-status={status}>
+      {/* Credit strip: the imagery providers' credits (required by their
+          terms) and any extra credits, always visible. On phones it moves
+          above the bottom sheet, whose height is BOTTOM_SHEET_HEIGHT_CLASS
+          in the cameras feature. */}
+      <div
+        className={cn(
+          'absolute bottom-1 left-2 z-10 flex max-w-[calc(100%-1rem)] flex-col items-start gap-1 text-[11px] leading-tight text-foreground/90',
+          isDetailOpen && 'max-md:bottom-[calc(60dvh+0.25rem)]',
+        )}
+      >
+        {credits !== undefined && (
+          <div className="rounded bg-background/70 px-1.5 py-0.5 backdrop-blur-sm">
+            {credits}
+          </div>
+        )}
+        <div ref={imageryCreditsRef} className="og-imagery-credits" />
+      </div>
       <div
         ref={attachGlobe}
         className="h-full w-full"

@@ -9,10 +9,13 @@
 # - style-src 'unsafe-inline': Cesium's widgets set inline styles.
 # - img-src and connect-src *.cesium.com and *.virtualearth.net: imagery
 #   streamed through Cesium ion when a token is configured.
+# - img-src imgproxy.windy.com and frame-src webcams.windy.com: Windy camera
+#   images and timelapse players, which Windy's terms require loading from
+#   Windy itself. They match the Windy source's allowed hosts on the server.
 /*
   X-Content-Type-Options: nosniff
   Referrer-Policy: strict-origin-when-cross-origin
   Cross-Origin-Opener-Policy: same-origin
   X-Frame-Options: DENY
   Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), usb=()
-  Content-Security-Policy-Report-Only: default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.cesium.com https://*.virtualearth.net; connect-src 'self' https://api.cesium.com https://assets.ion.cesium.com https://*.virtualearth.net; font-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'
+  Content-Security-Policy-Report-Only: default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.cesium.com https://*.virtualearth.net https://imgproxy.windy.com; connect-src 'self' https://api.cesium.com https://assets.ion.cesium.com https://*.virtualearth.net; font-src 'self'; frame-src https://webcams.windy.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'

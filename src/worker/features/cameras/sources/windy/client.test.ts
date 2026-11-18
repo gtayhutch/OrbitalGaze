@@ -74,6 +74,45 @@ describe('createWindyClient().listPopularWebcams', () => {
   });
 });
 
+describe('createWindyClient().getWebcamFeed', () => {
+  it('asks for one webcam with its images, players, and page link', async () => {
+    const fake = fakeFetch(() =>
+      jsonResponse({
+        webcamId: 42,
+        status: 'active',
+        player: {day: {embed: 'https://webcams.windy.com/embed/42/day'}},
+      }),
+    );
+    const windy = createWindyClient({apiKey: 'k', fetch: fake.fetch});
+
+    const webcam = await windy.getWebcamFeed('42');
+
+    expect(fake.requests[0]?.url.pathname).toBe('/webcams/api/v3/webcams/42');
+    expect(fake.requests[0]?.url.searchParams.get('include')).toBe(
+      'images,player,urls',
+    );
+    // The older `{embed}` player shape is reduced to the link.
+    expect(webcam?.player?.day).toBe('https://webcams.windy.com/embed/42/day');
+  });
+
+  it('returns null when Windy does not know the webcam', async () => {
+    const fake = fakeFetch(() => jsonResponse({}, 404));
+    const windy = createWindyClient({apiKey: 'k', fetch: fake.fetch});
+
+    expect(await windy.getWebcamFeed('42')).toBeNull();
+  });
+
+  it('refuses IDs that are not plain numbers, without calling Windy', async () => {
+    const fake = fakeFetch(() => jsonResponse({}));
+    const windy = createWindyClient({apiKey: 'k', fetch: fake.fetch});
+
+    for (const id of ['../keys', '42?x=1', '']) {
+      await expect(windy.getWebcamFeed(id)).rejects.toBeInstanceOf(RangeError);
+    }
+    expect(fake.requests).toHaveLength(0);
+  });
+});
+
 describe('isWindyKeyRejected', () => {
   it('is true only for a 401 or 403 answer', () => {
     expect(

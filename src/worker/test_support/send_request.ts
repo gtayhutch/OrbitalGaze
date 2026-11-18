@@ -20,11 +20,16 @@ export const TEST_ORIGIN = 'https://orbitalgaze.test';
  * (such as cache writes), so tests see a settled state.
  *
  * @param request The request to send.
+ * @param bindings The bindings to run with. Defaults to the test bindings;
+ *     tests pass a copy with changes, such as a secret set.
  * @returns The Worker's response.
  */
-export async function sendRequest(request: Request): Promise<Response> {
+export async function sendRequest(
+  request: Request,
+  bindings: Env = env,
+): Promise<Response> {
   const context = createExecutionContext();
-  const response = await worker.fetch(request, env, context);
+  const response = await worker.fetch(request, bindings, context);
   await waitOnExecutionContext(context);
   return response;
 }
@@ -34,6 +39,7 @@ export async function sendRequest(request: Request): Promise<Response> {
  *
  * @param path Path and query, for example `/api/v1/health`.
  * @param headers Extra request headers.
+ * @param bindings The bindings to run with (see {@link sendRequest}).
  * @returns The Worker's response.
  * @example
  * const response = await getPath('/api/v1/cameras/index');
@@ -41,6 +47,7 @@ export async function sendRequest(request: Request): Promise<Response> {
 export async function getPath(
   path: string,
   headers: Record<string, string> = {},
+  bindings: Env = env,
 ): Promise<Response> {
-  return sendRequest(new Request(`${TEST_ORIGIN}${path}`, {headers}));
+  return sendRequest(new Request(`${TEST_ORIGIN}${path}`, {headers}), bindings);
 }

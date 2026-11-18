@@ -100,6 +100,33 @@ export const CameraDetailSchema = z.object({
 /** One camera, as shown in the detail panel. */
 export type CameraDetail = z.infer<typeof CameraDetailSchema>;
 
+/**
+ * Body of `GET /api/v1/cameras/:id/feed` (inside the `data` envelope): the
+ * camera's current image and player links. All links are https, on hosts
+ * the camera's source allows. Image links stop working at `expiresAt`, so
+ * the browser asks again after that.
+ */
+export const CameraFeedSchema = z.object({
+  /** Which provider serves the feed; decides how it is shown and credited. */
+  kind: z.literal('windy'),
+  /** The latest still image. */
+  imageUrl: z.url({protocol: /^https$/}),
+  /** The image's size in pixels, when known. Shown at this size or smaller. */
+  imageWidth: z.number().int().positive().nullable(),
+  imageHeight: z.number().int().positive().nullable(),
+  /** The camera's page at the provider; every image links to it. */
+  pageUrl: z.url({protocol: /^https$/}),
+  /** An embeddable timelapse player, if the provider has one. */
+  timelapseUrl: z.url({protocol: /^https$/}).nullable(),
+  /** An embeddable live player, if the camera streams. */
+  liveUrl: z.url({protocol: /^https$/}).nullable(),
+  /** When the links stop working, as an ISO 8601 UTC timestamp. */
+  expiresAt: z.string(),
+});
+
+/** One camera's current image and players. */
+export type CameraFeed = z.infer<typeof CameraFeedSchema>;
+
 /** One search hit: enough to list it and fly the globe to it. */
 export const CameraSearchResultSchema = z.object({
   id: CameraIdSchema,

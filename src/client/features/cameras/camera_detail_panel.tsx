@@ -4,15 +4,17 @@
  * Layer: client feature (browser only). Rendered by the app shell.
  *
  * Shows what we actually know about a camera: its name, place, local time,
- * category, status, and the source's attribution. When a camera has no feed
- * (all test data today) the preview area says so plainly instead of showing a
- * fake player.
+ * category, status, and the source's attribution, plus its latest image and
+ * players (`camera_preview.tsx`). When a camera has no feed the preview area
+ * says so plainly instead of showing a fake player.
  *
  * Layout: a panel on the right on wide screens, a bottom sheet on phones.
+ * The sheet has a fixed height ({@link BOTTOM_SHEET_HEIGHT_CLASS}) so the
+ * globe's credits can sit just above it.
  * Accessibility: focus moves to the camera's title when it opens and back to
  * where it was when it closes; Esc and the close button both close it.
  */
-import {ExternalLink, VideoOff, X} from 'lucide-react';
+import {ExternalLink, X} from 'lucide-react';
 import {useEffect, useRef, useState} from 'react';
 
 import {Button} from '@/client/components/ui/button';
@@ -20,8 +22,15 @@ import {formatPlace} from '@/client/lib/format';
 import {cn} from '@/client/lib/utils';
 import type {CameraDetail} from '@/shared/cameras';
 
+import {CameraPreview} from './camera_preview';
 import {CATEGORY_STYLES} from './category_style';
 import type {CameraDetailState} from './use_camera_detail';
+
+/**
+ * Height of the bottom sheet on phones. The globe moves its credits above
+ * the sheet by the same amount (`globe_view.tsx`), so keep the two in step.
+ */
+export const BOTTOM_SHEET_HEIGHT_CLASS = 'h-[60dvh]';
 
 /** How often the camera's local time is refreshed, in milliseconds. */
 const LOCAL_TIME_REFRESH_MS = 30_000;
@@ -86,22 +95,7 @@ function CameraDetails({camera}: {camera: CameraDetail}): React.JSX.Element {
     <>
       {place !== '' && <p className="text-sm text-muted-foreground">{place}</p>}
 
-      <div className="mt-4 grid aspect-video place-items-center rounded-lg border border-panel-border bg-background/60 p-4 text-center">
-        <div>
-          <VideoOff
-            className="mx-auto size-6 text-muted-foreground"
-            aria-hidden="true"
-          />
-          <p className="mt-2 text-sm font-medium">
-            {camera.hasFeed ? 'Live view coming soon' : 'Preview not available'}
-          </p>
-          <p className="mt-1 text-xs text-muted-foreground">
-            {camera.hasFeed
-              ? 'Viewing this camera will be added shortly.'
-              : 'This camera has no live view yet.'}
-          </p>
-        </div>
-      </div>
+      <CameraPreview camera={camera} />
 
       <dl className="mt-4 grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
         <dt className="text-muted-foreground">Category</dt>
@@ -232,8 +226,9 @@ export function CameraDetailPanel({
       className={cn(
         'pointer-events-auto absolute overflow-y-auto border border-panel-border bg-panel p-5 backdrop-blur-md',
         // Phones: bottom sheet. Wide screens: panel on the right.
-        'inset-x-0 bottom-0 max-h-[60vh] rounded-t-2xl',
-        'md:inset-x-auto md:top-4 md:right-4 md:bottom-auto md:max-h-[calc(100dvh-2rem)] md:w-96 md:rounded-2xl',
+        'inset-x-0 bottom-0 rounded-t-2xl',
+        BOTTOM_SHEET_HEIGHT_CLASS,
+        'md:inset-x-auto md:top-4 md:right-4 md:bottom-auto md:h-auto md:max-h-[calc(100dvh-2rem)] md:w-96 md:rounded-2xl',
       )}
     >
       <div className="flex items-start gap-2">

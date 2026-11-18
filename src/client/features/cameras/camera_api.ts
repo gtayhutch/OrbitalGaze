@@ -9,9 +9,11 @@
 import {getJson} from '@/client/lib/api_client';
 import {
   CameraDetailSchema,
+  CameraFeedSchema,
   CameraIndexSchema,
   CameraSearchResponseSchema,
   type CameraDetail,
+  type CameraFeed,
   type CameraIndex,
   type CameraSearchResponse,
 } from '@/shared/cameras';
@@ -45,6 +47,26 @@ export async function fetchCamera(
   return getJson(
     `/api/v1/cameras/${encodeURIComponent(id)}`,
     CameraDetailSchema,
+    signal,
+  );
+}
+
+/**
+ * Fetches a camera's current image and player links.
+ *
+ * @param id The camera's ID. It is URL-encoded here.
+ * @param signal Cancels the request.
+ * @returns The feed. Its links stop working at `expiresAt`.
+ * @throws {ApiRequestError} With code `NOT_FOUND` if the camera has no
+ *     preview, or `INTERNAL` if the provider can't be reached.
+ */
+export async function fetchCameraFeed(
+  id: string,
+  signal?: AbortSignal,
+): Promise<CameraFeed> {
+  return getJson(
+    `/api/v1/cameras/${encodeURIComponent(id)}/feed`,
+    CameraFeedSchema,
     signal,
   );
 }

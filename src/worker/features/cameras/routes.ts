@@ -12,6 +12,10 @@
  * - `GET /search?q=`: full-text search, at most 20 results.
  * - `GET /:id`: one camera for the detail panel. Unknown and hidden cameras
  *   both answer 404, so a hidden camera's existence isn't revealed.
+ * - `GET /:id/feed`: the camera's current image and player links from its
+ *   provider (Windy), checked against the source's allowed hosts. 404 when
+ *   there is no feed, for the same reasons as above. Cached for 4 minutes,
+ *   because the links expire.
  *
  * Handlers stay thin: validate input, call the repository, shape the reply.
  * The camera's feed location never appears in any response.
@@ -29,12 +33,20 @@ import {
 import type {AppContext} from '../../app_context';
 import {AppError} from '../../lib/errors';
 import {parseInput} from '../../lib/validation';
+import {loadCameraFeed} from './feed_service';
 import {CAMERA_INDEX_OBJECT_KEY} from './ingest_service';
 import {createCameraRepository} from './repository';
+import {createWindyClient} from './sources/windy/client';
 import {toFtsQuery} from './search_query';
 
 /** How long, in seconds, browsers and caches may reuse the camera index. */
 export const INDEX_MAX_AGE_SECONDS = 300;
+
+/**
+ * How long, in seconds, a camera's feed links may be reused. Windy's links
+ * last 10 minutes; edge copy plus browser copy stay under 9.
+ */
+export const FEED_MAX_AGE_SECONDS = 240;
 
 /**
  * Key for the index in Cloudflare's cache. It is not a real address; the
@@ -116,6 +128,57 @@ export const cameraRoutes = new Hono<AppContext>()
       results: await cameras.searchByText(ftsQuery, MAX_SEARCH_RESULTS),
     };
     return c.json({data: body});
+  })
+
+  .get('/:id/feed', async c => {
+    const {id} = parseInput(CameraParamsSchema, {id: c.req.param('id')});
+    const cacheControl = `public, max-age=${FEED_MAX_AGE_SECONDS}`;
+
+    // Step 1: serve a recent copy if this location has one. The ID was
+    // validated above, so it is safe in the cache key.
+    const cache = caches.default;
+    const cacheKey = `https://cache.orbitalgaze.internal/api/v1/cameras/${id}/feed?v=1`;
+    const cached = await cache.match(cacheKey);
+    if (cached !== undefined) {
+      return c.body(await cached.text(), 200, {
+        'Content-Type': 'application/json; charset=UTF-8',
+        'Cache-Control': cacheControl,
+      });
+    }
+
+    // Step 2: ask the provider for fresh links.
+    const config = c.var.config;
+    const feed = await loadCameraFeed(
+      {
+        cameras: createCameraRepository(c.env.DB),
+        windy:
+          config.windyApiKey === null
+            ? null
+            : createWindyClient({apiKey: config.windyApiKey}),
+        now: new Date(),
+        logger: c.var.logger,
+      },
+      id,
+    );
+    if (feed === null) {
+      throw new AppError(
+        'NOT_FOUND',
+        'No preview is available for this camera.',
+      );
+    }
+    const body = JSON.stringify({data: feed});
+
+    // Step 3: keep a copy for other visitors, well inside the links' lifetime.
+    c.executionCtx.waitUntil(
+      cache.put(
+        cacheKey,
+        new Response(body, {headers: {'Cache-Control': cacheControl}}),
+      ),
+    );
+    return c.body(body, 200, {
+      'Content-Type': 'application/json; charset=UTF-8',
+      'Cache-Control': cacheControl,
+    });
   })
 
   .get('/:id', async c => {

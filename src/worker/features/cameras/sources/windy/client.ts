@@ -16,8 +16,10 @@ import {
 import {
   WINDY_MAX_PAGE_SIZE,
   WindyListPageSchema,
+  WindyWebcamFeedSchema,
   WindyWebcamSchema,
   type WindyWebcam,
+  type WindyWebcamFeed,
 } from './schemas';
 
 /** The only host the client calls. */
@@ -54,6 +56,14 @@ export interface WindyClient {
     offset: number;
     limit: number;
   }): Promise<WindyListPage>;
+  /**
+   * Gets one webcam's current image and player links.
+   *
+   * @param webcamId Windy's numeric webcam ID, as stored in `streamRef`.
+   * @returns The webcam, or `null` if Windy doesn't know it.
+   * @throws {OutboundError} When the request fails or the answer is malformed.
+   */
+  getWebcamFeed(webcamId: string): Promise<WindyWebcamFeed | null>;
 }
 
 /** Options for {@link createWindyClient}. */
@@ -132,6 +142,38 @@ export function createWindyClient(options: WindyClientOptions): WindyClient {
         webcams,
         skipped: page.data.webcams.length - webcams.length,
       };
+    },
+
+    async getWebcamFeed(webcamId) {
+      // The ID is ours (from the database), but it still goes into a URL
+      // path, so only plain digits are accepted.
+      if (!/^\d{1,20}$/.test(webcamId)) {
+        throw new RangeError('Windy webcam IDs are numeric.');
+      }
+      const url = new URL(`${WINDY_API_BASE}/webcams/${webcamId}`);
+      url.search = new URLSearchParams({
+        include: 'images,player,urls',
+        lang: 'en',
+      }).toString();
+
+      let body: unknown;
+      try {
+        body = await fetchJson(url, requestOptions);
+      } catch (error) {
+        if (
+          error instanceof OutboundError &&
+          error.failure === 'http-status' &&
+          error.status === 404
+        ) {
+          return null;
+        }
+        throw error;
+      }
+      const webcam = WindyWebcamFeedSchema.safeParse(body);
+      if (!webcam.success) {
+        throw new OutboundError('invalid-body', WINDY_API_HOST, 200);
+      }
+      return webcam.data;
     },
   };
 }
