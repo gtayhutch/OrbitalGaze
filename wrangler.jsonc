@@ -152,6 +152,13 @@
       ],
     },
     "production": {
+      "name": "orbitalgaze",
+      "account_id": "9fe808d792b2aa8f095351f40b89c3eb",
+      // Served only at orbitalgaze.com. www.orbitalgaze.com never reaches
+      // the Worker: a zone redirect rule sends it to orbitalgaze.com.
+      "routes": [{"pattern": "orbitalgaze.com", "custom_domain": true}],
+      "workers_dev": false,
+      "preview_urls": false,
       "vars": {"APP_ENV": "production"},
       "secrets": {"required": ["WINDY_API_KEY"]},
       "queues": {
@@ -189,8 +196,7 @@
         {
           "binding": "DB",
           "database_name": "orbitalgaze-production",
-          // Replace with the production database ID when it is created.
-          "database_id": "00000000-0000-0000-0000-000000000002",
+          "database_id": "33c9f5e7-f452-457f-ac04-f8cdd4989fd8",
           "migrations_dir": "migrations",
         },
       ],

@@ -69,6 +69,11 @@ test('the app page carries the static security headers', async ({request}) => {
   expect(csp).toContain('img-src');
   expect(csp).toContain('https://imgproxy.windy.com');
   expect(csp).toContain('frame-src https://webcams.windy.com;');
+  // Scripts: our own, WebAssembly for Cesium, and Cloudflare Web Analytics
+  // only. Never 'unsafe-eval' or 'unsafe-inline'.
+  expect(csp).toContain(
+    "script-src 'self' 'wasm-unsafe-eval' https://static.cloudflareinsights.com;",
+  );
 });
 
 test('loading the globe never evaluates strings as code', async ({page}) => {
