@@ -17,6 +17,17 @@ import {StrictMode} from 'react';
 import {createRoot} from 'react-dom/client';
 
 import {App} from './app/app';
+import {reportBrowserError} from './lib/error_reporting';
+
+// Errors outside React can still prevent the visitor from using the app.
+window.addEventListener('error', event => {
+  if (event.error instanceof Error) {
+    reportBrowserError('browser.unhandled', event.error);
+  }
+});
+window.addEventListener('unhandledrejection', event => {
+  reportBrowserError('browser.unhandled', event.reason);
+});
 
 const rootElement = document.getElementById('root');
 if (rootElement === null) {

@@ -5,8 +5,8 @@
  *
  * If any component throws while rendering, React unmounts the whole tree.
  * This boundary catches that and shows a friendly message with a reload
- * button instead of a blank page. Error reporting to a monitoring service
- * will be added here.
+ * button instead of a blank page. It reports through the browser diagnostics
+ * module when monitoring is configured.
  *
  * React only supports error boundaries as class components, which is why this
  * is a class while every other component is a function.
@@ -14,6 +14,7 @@
 import {Component, type ErrorInfo, type ReactNode} from 'react';
 
 import {Button} from '@/client/components/ui/button';
+import {reportBrowserError} from '@/client/lib/error_reporting';
 
 /** Props for {@link AppErrorBoundary}. */
 export interface AppErrorBoundaryProps {
@@ -46,6 +47,7 @@ export class AppErrorBoundary extends Component<
   /** Records the failure for debugging. */
   override componentDidCatch(error: Error, info: ErrorInfo): void {
     console.error('The app failed to render.', error, info.componentStack);
+    reportBrowserError('browser.app-render', error);
   }
 
   override render(): ReactNode {

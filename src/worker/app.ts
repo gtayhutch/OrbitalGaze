@@ -25,6 +25,7 @@ import {Hono, type MiddlewareHandler} from 'hono';
 
 import type {AppContext} from './app_context';
 import {cameraRoutes} from './features/cameras';
+import {cspReportRoutes} from './features/csp_reports';
 import {healthRoutes} from './features/health';
 import {
   createLayerRoutes,
@@ -32,6 +33,7 @@ import {
   type SnapshotSource,
 } from './features/layers';
 import {parseWorkerConfig} from './lib/config';
+import {reportUnexpectedApiError} from './lib/error_reporting';
 import {AppError, buildErrorBody} from './lib/errors';
 import {createLogger} from './lib/logger';
 import {rateLimit} from './lib/rate_limit';
@@ -118,6 +120,7 @@ export function createApp(options: AppOptions = {}): Hono<AppContext> {
   // Routes. Each feature exposes a router through its index.ts.
   app.route('/v1/health', healthRoutes);
   app.route('/v1/cameras', cameraRoutes);
+  app.route('/v1/csp-reports', cspReportRoutes);
   app.route(
     '/v1/layers',
     createLayerRoutes(options.snapshotSources ?? SNAPSHOT_SOURCES),
@@ -150,9 +153,9 @@ export function createApp(options: AppOptions = {}): Hono<AppContext> {
     // Anything else is a bug. Log the details; tell the client only that it
     // failed. The request ID and logger are always present here: the first
     // two middleware steps attach them and can't fail.
+    reportUnexpectedApiError(error);
     c.var.logger.error('unhandled error', {
       errorName: error.name,
-      errorMessage: error.message,
       path: c.req.path,
     });
     return c.json(

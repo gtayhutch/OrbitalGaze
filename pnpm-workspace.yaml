@@ -9,5 +9,8 @@ allowBuilds:
 #   only through the gts > inquirer > external-editor prompt (development
 #   only), whose ^0.0.33 range never picks up the fix. The tmp functions
 #   external-editor uses are unchanged in 0.2.x.
+# - typescript-estree's minimatch range excludes the fixed major. Its glob
+#   calls use the same API as the upstream release that adopted 11.0.1.
 overrides:
   'tmp@<0.2.6': '^0.2.6'
+  '@typescript-eslint/typescript-estree@8.72.2>minimatch': '^11.0.1'

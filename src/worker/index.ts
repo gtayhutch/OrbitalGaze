@@ -16,12 +16,13 @@
 import {createApp} from './app';
 import {handleIngestBatch} from './jobs/ingest_queue';
 import {handleScheduled} from './jobs/scheduled';
+import {withWorkerErrorReporting} from './lib/error_reporting';
 
 /** The API application, shared by every request this isolate handles. */
 const app = createApp();
 
 // Workers require a default export; this is the one place it's used for that.
-export default {
+export default withWorkerErrorReporting({
   fetch: app.fetch,
   scheduled: async (controller, env) => {
     await handleScheduled(controller, env);
@@ -29,4 +30,4 @@ export default {
   queue: async (batch, env) => {
     await handleIngestBatch(batch, env);
   },
-} satisfies ExportedHandler<Env>;
+} satisfies ExportedHandler<Env>);

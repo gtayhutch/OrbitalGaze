@@ -1,6 +1,6 @@
 {
   "name": "orbitalgaze",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "license": "UNLICENSED",
   "description": "Interactive 3D globe for exploring public webcams around the world.",
@@ -29,6 +29,8 @@
   },
   "dependencies": {
     "@photostructure/tz-lookup": "^11.8.0",
+    "@sentry/browser": "11.13.0",
+    "@sentry/cloudflare": "11.13.0",
     "cesium": "^1.147.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
