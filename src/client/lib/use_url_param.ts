@@ -7,8 +7,18 @@
  * example `?camera=seed-0042`), so links and the Back button work. The hook
  * subscribes to `popstate`, which fires on Back/Forward, and writes changes
  * with `history.pushState`, so each change is one history entry.
+ *
+ * State that changes constantly and shouldn't fill the Back button's history
+ * (for example the globe's view, updated after every pan) passes
+ * `{replace: true}`, so the current entry is rewritten instead.
  */
 import {useCallback, useEffect, useState} from 'react';
+
+/** Options for {@link useUrlParam}. */
+export interface UrlParamOptions {
+  /** Rewrite the current history entry instead of adding a new one. */
+  readonly replace?: boolean;
+}
 
 /** Reads `name` from the current URL. */
 function readParam(name: string): string | null {
@@ -19,6 +29,7 @@ function readParam(name: string): string | null {
  * Reads and writes one query parameter.
  *
  * @param name The parameter name, for example `camera`.
+ * @param options `{replace: true}` to update the URL without adding history.
  * @returns The current value (or `null` when absent) and a setter. Setting
  *     `null` removes the parameter.
  * @example
@@ -27,7 +38,9 @@ function readParam(name: string): string | null {
  */
 export function useUrlParam(
   name: string,
+  options: UrlParamOptions = {},
 ): [string | null, (value: string | null) => void] {
+  const replace = options.replace === true;
   const [value, setValue] = useState(() => readParam(name));
 
   // Follow Back and Forward.
@@ -49,13 +62,17 @@ export function useUrlParam(
       } else {
         url.searchParams.set(name, next);
       }
-      // Only add a history entry when the URL actually changes.
+      // Only touch history when the URL actually changes.
       if (url.href !== window.location.href) {
-        window.history.pushState(null, '', url);
+        if (replace) {
+          window.history.replaceState(null, '', url);
+        } else {
+          window.history.pushState(null, '', url);
+        }
       }
       setValue(next);
     },
-    [name],
+    [name, replace],
   );
 
   return [value, update];

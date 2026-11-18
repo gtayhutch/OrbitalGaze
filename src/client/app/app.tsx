@@ -17,6 +17,12 @@
  * that camera exactly like clicking its pin, and switches the webcam layer
  * on if it was off, so the chosen camera's pin is visible.
  *
+ * The globe's view lives in the URL too (`?view=`), rewritten in place each
+ * time the camera stops, so a reload or a copied address opens the same
+ * view. "Share this view" copies that address plus the active layers
+ * (`?layers=`); a visitor arriving with `?layers=` sees those layers for
+ * the visit without their own saved choices changing.
+ *
  * Which layers are on comes from the layer registry and the visitor's saved
  * choices. A layer that is off draws nothing, and its credit leaves the
  * credit bar.
@@ -36,11 +42,21 @@ import {
   useCategoryFilter,
 } from '@/client/features/cameras';
 import {CreditBar, LayerPanel, useActiveLayers} from '@/client/features/layers';
+import type {CameraView} from '@/client/features/globe';
 import {
   SearchDialog,
   SearchTrigger,
   useSearchShortcut,
 } from '@/client/features/search';
+import {
+  buildShareUrl,
+  decodeLayers,
+  decodeView,
+  encodeView,
+  LAYERS_URL_PARAM,
+  ShareButton,
+  VIEW_URL_PARAM,
+} from '@/client/features/share';
 import {useUrlParam} from '@/client/lib/use_url_param';
 import {
   CameraIdSchema,
@@ -77,7 +93,13 @@ export function App(): React.JSX.Element {
   const environment = useAppEnvironment();
   const index = useCameraIndex();
   const filter = useCategoryFilter();
-  const activeLayers = useActiveLayers();
+  // A share link's layers and view are read once, on the first render.
+  const [linkLayers] = useState(() =>
+    decodeLayers(
+      new URLSearchParams(window.location.search).get(LAYERS_URL_PARAM),
+    ),
+  );
+  const activeLayers = useActiveLayers(linkLayers);
   const {setLayerActive} = activeLayers;
   const showWebcams = activeLayers.active.has('webcams');
 
@@ -88,6 +110,24 @@ export function App(): React.JSX.Element {
     ? rawCameraId
     : null;
   const detail = useCameraDetail(selectedCameraId);
+
+  // The view in the URL: read once as the starting view, then rewritten
+  // (without new history entries) each time the camera stops.
+  const [rawView, setViewParam] = useUrlParam(VIEW_URL_PARAM, {
+    replace: true,
+  });
+  const [initialView] = useState(() => decodeView(rawView));
+  const recordView = useCallback(
+    (view: CameraView) => {
+      setViewParam(encodeView(view));
+    },
+    [setViewParam],
+  );
+  const {active: activeLayerSet} = activeLayers;
+  const getShareUrl = useCallback(
+    () => buildShareUrl(window.location.href, activeLayerSet),
+    [activeLayerSet],
+  );
 
   const closeDetail = useCallback(() => {
     setCameraId(null);
@@ -142,6 +182,8 @@ export function App(): React.JSX.Element {
             visibleCategories={showWebcams ? filter.visible : NO_CATEGORIES}
             focus={focus}
             selectedCameraId={selectedCameraId}
+            initialView={initialView}
+            onViewChange={recordView}
             onSelectCamera={setCameraId}
             isDetailOpen={detail.status !== 'idle'}
             credits={<CreditBar active={activeLayers.active} />}
@@ -150,6 +192,7 @@ export function App(): React.JSX.Element {
         <TopBar
           environment={environment}
           search={<SearchTrigger onOpen={openSearch} />}
+          share={<ShareButton getShareUrl={getShareUrl} />}
         />
         <LayerPanel
           activeLayers={activeLayers}

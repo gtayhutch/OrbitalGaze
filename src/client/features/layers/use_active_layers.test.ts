@@ -58,3 +58,24 @@ describe('useActiveLayers', () => {
     expect(result.current.active).toBe(before);
   });
 });
+
+describe('useActiveLayers with layers from a share link', () => {
+  it('uses the link layers instead of the saved choices', () => {
+    window.localStorage.setItem(LAYER_CHOICES_STORAGE_KEY, '{"webcams":true}');
+
+    const {result} = renderHook(() => useActiveLayers(new Set()));
+
+    expect(result.current.active.size).toBe(0);
+  });
+
+  it('changes only the visit, never the saved choices', () => {
+    const {result} = renderHook(() => useActiveLayers(new Set()));
+
+    act(() => {
+      result.current.setLayerActive('webcams', true);
+    });
+
+    expect(result.current.active.has('webcams')).toBe(true);
+    expect(window.localStorage.getItem(LAYER_CHOICES_STORAGE_KEY)).toBeNull();
+  });
+});
