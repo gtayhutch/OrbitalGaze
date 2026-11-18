@@ -46,6 +46,42 @@
     },
   ],
 
+  // Secrets the Worker expects. Values are never stored here: locally they
+  // come from .dev.vars, and in hosted environments from Worker secrets.
+  // WINDY_API_KEY is optional locally; without it the import jobs skip.
+  "secrets": {"required": ["WINDY_API_KEY"]},
+
+  // Scheduled jobs (see src/worker/jobs/scheduled.ts). Times are UTC.
+  //   - 03:00 daily: queue the nightly Windy import, one message per page.
+  //   - :30 hourly: mark cameras that stopped appearing as offline and
+  //     rebuild the camera index file.
+  "triggers": {"crons": ["0 3 * * *", "30 * * * *"]},
+
+  // The import queue. One consumer at a time, ten pages per batch, keeps the
+  // load on Windy's API gentle. Queues aren't inherited, so each
+  // environment repeats them with its own queue name.
+  "queues": {
+    "producers": [
+      {"binding": "INGEST_QUEUE", "queue": "orbitalgaze-ingest-local"},
+    ],
+    "consumers": [
+      {
+        "queue": "orbitalgaze-ingest-local",
+        "max_batch_size": 10,
+        "max_concurrency": 1,
+        "max_retries": 3,
+      },
+    ],
+  },
+
+  // Holds the prebuilt camera index file the globe loads.
+  "r2_buckets": [
+    {
+      "binding": "CAMERA_INDEX",
+      "bucket_name": "orbitalgaze-camera-index-local",
+    },
+  ],
+
   // Per-address request budgets (see src/worker/lib/rate_limit.ts). Rate
   // limits aren't inherited, so each environment repeats them.
   "ratelimits": [
@@ -64,6 +100,26 @@
   "env": {
     "staging": {
       "vars": {"APP_ENV": "staging"},
+      "secrets": {"required": ["WINDY_API_KEY"]},
+      "queues": {
+        "producers": [
+          {"binding": "INGEST_QUEUE", "queue": "orbitalgaze-ingest-staging"},
+        ],
+        "consumers": [
+          {
+            "queue": "orbitalgaze-ingest-staging",
+            "max_batch_size": 10,
+            "max_concurrency": 1,
+            "max_retries": 3,
+          },
+        ],
+      },
+      "r2_buckets": [
+        {
+          "binding": "CAMERA_INDEX",
+          "bucket_name": "orbitalgaze-camera-index-staging",
+        },
+      ],
       "ratelimits": [
         {
           "name": "API_RATE_LIMITER",
@@ -88,6 +144,26 @@
     },
     "production": {
       "vars": {"APP_ENV": "production"},
+      "secrets": {"required": ["WINDY_API_KEY"]},
+      "queues": {
+        "producers": [
+          {"binding": "INGEST_QUEUE", "queue": "orbitalgaze-ingest-production"},
+        ],
+        "consumers": [
+          {
+            "queue": "orbitalgaze-ingest-production",
+            "max_batch_size": 10,
+            "max_concurrency": 1,
+            "max_retries": 3,
+          },
+        ],
+      },
+      "r2_buckets": [
+        {
+          "binding": "CAMERA_INDEX",
+          "bucket_name": "orbitalgaze-camera-index-production",
+        },
+      ],
       "ratelimits": [
         {
           "name": "API_RATE_LIMITER",

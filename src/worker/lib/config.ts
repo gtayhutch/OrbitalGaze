@@ -3,8 +3,8 @@
  *
  * Layer: worker library (server only).
  *
- * This is the only module that reads plain settings from the Worker's `env`
- * object. Everything else receives the typed {@link WorkerConfig} it returns,
+ * This is the only module that reads plain settings and secrets from the
+ * Worker's `env` object. Everything else receives the typed {@link WorkerConfig} it returns,
  * so a missing or misspelled setting fails loudly in one place instead of
  * surfacing later as `undefined` deep inside a feature. Bindings such as the
  * database are still taken from `env` by route handlers and passed down.
@@ -20,15 +20,40 @@ import {
 export interface WorkerConfig {
   /** Which environment this Worker is running in. */
   readonly appEnvironment: AppEnvironment;
+  /**
+   * Key for the Windy Webcams API, or `null` when none is set. Required in
+   * staging and production. Locally it is optional: without it the Windy
+   * import jobs skip, so tests and CI never call Windy.
+   */
+  readonly windyApiKey: string | null;
 }
+
+/** Environments that must have every secret set. */
+const HOSTED_ENVIRONMENTS: ReadonlySet<AppEnvironment> = new Set([
+  'staging',
+  'production',
+]);
 
 /**
  * Shape of the raw settings in `env`. Unknown keys (including bindings like
  * `DB`) are ignored here.
  */
-const RawWorkerSettingsSchema = z.object({
-  APP_ENV: AppEnvironmentSchema,
-});
+const RawWorkerSettingsSchema = z
+  .object({
+    APP_ENV: AppEnvironmentSchema,
+    // An empty value (for example `WINDY_API_KEY=` copied from
+    // .dev.vars.example) means "not set".
+    WINDY_API_KEY: z
+      .string()
+      .optional()
+      .transform(value => (value === undefined || value === '' ? null : value)),
+  })
+  .refine(
+    settings =>
+      settings.WINDY_API_KEY !== null ||
+      !HOSTED_ENVIRONMENTS.has(settings.APP_ENV),
+    {path: ['WINDY_API_KEY'], message: 'Required in hosted environments.'},
+  );
 
 /** Thrown when the Worker's settings are missing or invalid. */
 export class ConfigError extends Error {
@@ -52,6 +77,7 @@ export class ConfigError extends Error {
  * @example
  * const config = parseWorkerConfig(env);
  * config.appEnvironment; // "test", "staging", or "production"
+ * config.windyApiKey; // the key, or null when not set locally
  */
 export function parseWorkerConfig(env: unknown): WorkerConfig {
   const result = RawWorkerSettingsSchema.safeParse(env);
@@ -62,5 +88,8 @@ export function parseWorkerConfig(env: unknown): WorkerConfig {
       .join(', ');
     throw new ConfigError(failingSettings);
   }
-  return {appEnvironment: result.data.APP_ENV};
+  return {
+    appEnvironment: result.data.APP_ENV,
+    windyApiKey: result.data.WINDY_API_KEY,
+  };
 }
