@@ -8,6 +8,7 @@
  * fake sources without reaching the real network.
  */
 import type {SnapshotSource} from './snapshot_source';
+import {CELESTRAK_SATELLITES} from './sources/celestrak_satellites';
 import {USGS_EARTHQUAKES} from './sources/usgs_earthquakes';
 
 /**
@@ -15,4 +16,7 @@ import {USGS_EARTHQUAKES} from './sources/usgs_earthquakes';
  * entry must follow the rules on {@link SnapshotSource} (checked by
  * `registry.test.ts`).
  */
-export const SNAPSHOT_SOURCES: readonly SnapshotSource[] = [USGS_EARTHQUAKES];
+export const SNAPSHOT_SOURCES: readonly SnapshotSource[] = [
+  USGS_EARTHQUAKES,
+  CELESTRAK_SATELLITES,
+];
