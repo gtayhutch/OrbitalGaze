@@ -38,6 +38,8 @@ export interface LayerPanelProps {
    * example the webcam category filters).
    */
   layerControls?: Readonly<Partial<Record<LayerId, React.ReactNode>>>;
+  /** Controls shown above the layer groups, such as the map style switch. */
+  top?: React.ReactNode;
   /** Extra classes for positioning. */
   className?: string;
 }
@@ -95,6 +97,7 @@ function LayerRow({
 export function LayerPanel({
   activeLayers,
   layerControls = {},
+  top,
   className,
 }: LayerPanelProps): React.JSX.Element {
   const contentId = useId();
@@ -140,6 +143,7 @@ export function LayerPanel({
         hidden={!isOpen}
         className="max-h-[calc(100dvh-9rem)] overflow-y-auto border-t border-panel-border px-4 pt-2 pb-3"
       >
+        {top !== undefined && <div className="py-2">{top}</div>}
         {groups.map(group => (
           <section key={group.domain} aria-label={group.label} className="py-1">
             <h2 className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
