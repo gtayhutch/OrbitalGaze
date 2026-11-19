@@ -9,6 +9,7 @@
  * the order layers appear within their panel group.
  */
 import {EARTHQUAKE_LAYER_ID} from '@/shared/earthquakes';
+import {SATELLITE_LAYER_ID} from '@/shared/satellites';
 
 import {
   LAYER_DOMAIN_LABELS,
@@ -50,6 +51,18 @@ export const LAYER_DEFINITIONS = [
         text: 'USGS Earthquake Hazards Program',
         href: 'https://earthquake.usgs.gov/',
       },
+    ],
+    defaultOn: false,
+  },
+  {
+    id: SATELLITE_LAYER_ID,
+    domain: 'space',
+    label: 'Satellites',
+    summary:
+      'Active satellites at their real height, moving live. Military satellites are not shown.',
+    attribution: [
+      {text: 'Orbital data: '},
+      {text: 'CelesTrak', href: 'https://celestrak.org/'},
     ],
     defaultOn: false,
   },

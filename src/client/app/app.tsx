@@ -7,7 +7,8 @@
  * absolutely positioned layers:
  * - top left: the top bar (brand, environment badge, search), with the
  *   layer panel below it (layers grouped by domain, each with a switch);
- * - right (bottom sheet on phones): the selected camera's details.
+ * - right (bottom sheet on phones): the selected camera's or satellite's
+ *   details (one at a time).
  *
  * The selected camera lives in the URL (`?camera=<id>`), so a link opens the
  * same camera and Back closes it. Selecting a camera, from a pin or a link,
@@ -27,12 +28,18 @@
  * choices. A layer that is off draws nothing, and its credit leaves the
  * credit bar.
  *
+ * The followed satellite lives in the URL too (`?satellite=<NORAD number>`).
+ * A link with it switches the satellites layer on. Selecting a satellite
+ * closes any camera or earthquake, and the other way round. While the
+ * satellites layer is on, search also matches satellite names and numbers.
+ *
  * The globe is loaded lazily: MapLibre is over a megabyte, so the shell
  * (brand, panels) appears first and the globe streams in behind it.
  * Everything is wrapped in an error boundary so a failure shows a recovery
  * screen instead of a blank page.
  */
-import {lazy, Suspense, useCallback, useMemo, useState} from 'react';
+import type {Map as MapLibreMap} from 'maplibre-gl';
+import {lazy, Suspense, useCallback, useEffect, useMemo, useState} from 'react';
 
 import {
   CameraDetailPanel,
@@ -45,9 +52,18 @@ import {EarthquakeControls} from '@/client/features/earthquakes';
 import {CreditBar, LayerPanel, useActiveLayers} from '@/client/features/layers';
 import type {CameraView} from '@/client/features/globe';
 import {
+  SatelliteControls,
+  SatelliteDetailPanel,
+  SATELLITE_GROUP_STYLES,
+  searchSatellites,
+  useSatelliteGroups,
+  useSatellites,
+} from '@/client/features/satellites';
+import {
   SearchDialog,
   SearchTrigger,
   useSearchShortcut,
+  type ExtraSearchGroup,
 } from '@/client/features/search';
 import {
   buildShareUrl,
@@ -66,6 +82,7 @@ import {
   type Earthquake,
 } from '@/shared/earthquakes';
 import {useUrlParam} from '@/client/lib/use_url_param';
+import {SATELLITE_LAYER_ID} from '@/shared/satellites';
 import {
   CameraIdSchema,
   type CameraCategory,
@@ -84,6 +101,17 @@ const GlobeView = lazy(async () => {
 
 /** URL query parameter holding the selected camera's ID. */
 export const CAMERA_URL_PARAM = 'camera';
+
+/** URL query parameter holding the followed satellite's NORAD number. */
+export const SATELLITE_URL_PARAM = 'satellite';
+
+/** Most satellites listed in search. */
+const MAX_SATELLITE_RESULTS = 8;
+
+/** Reads a NORAD number from the URL; anything else is ignored. */
+function parseSatelliteId(raw: string | null): number | null {
+  return raw !== null && /^[1-9]\d{0,8}$/.test(raw) ? Number(raw) : null;
+}
 
 /** Shared empty list, so the globe doesn't redraw while the index loads. */
 const NO_CAMERAS: readonly CameraIndexEntry[] = [];
@@ -138,23 +166,95 @@ export function App(): React.JSX.Element {
       ? (earthquakes.find(event => event.id === requestedQuake) ?? null)
       : null;
 
-  /** Selects a camera and clears the current earthquake focus. */
+  // The followed satellite, from the URL. A link with one switches the
+  // satellites layer on (once, on arrival).
+  const [rawSatelliteId, setSatelliteParam] = useUrlParam(SATELLITE_URL_PARAM);
+  const selectedSatelliteId = parseSatelliteId(rawSatelliteId);
+  const [linkSatellite] = useState(selectedSatelliteId);
+  useEffect(() => {
+    if (linkSatellite !== null) {
+      setLayerActive(SATELLITE_LAYER_ID, true);
+    }
+  }, [linkSatellite, setLayerActive]);
+  const showSatellites = activeLayers.active.has(SATELLITE_LAYER_ID);
+  const satelliteGroups = useSatelliteGroups();
+  const [map, setMap] = useState<MapLibreMap | null>(null);
+
+  /** Selects a camera and clears the current earthquake and satellite. */
   const selectCamera = useCallback(
     (id: string) => {
       setRequestedQuake(null);
+      setSatelliteParam(null);
       setCameraId(id);
     },
-    [setCameraId],
+    [setCameraId, setSatelliteParam],
   );
 
-  /** Selects a quake from its accessible list and dismisses any camera. */
+  /** Selects a quake from its accessible list and dismisses the others. */
   const selectQuake = useCallback(
     (id: string) => {
       setCameraId(null);
+      setSatelliteParam(null);
       setRequestedQuake(id);
     },
-    [setCameraId],
+    [setCameraId, setSatelliteParam],
   );
+
+  /** Follows a satellite and dismisses any camera or earthquake. */
+  const selectSatellite = useCallback(
+    (id: number) => {
+      setCameraId(null);
+      setRequestedQuake(null);
+      setSatelliteParam(String(id));
+    },
+    [setCameraId, setSatelliteParam],
+  );
+  const satellites = useSatellites({
+    enabled: showSatellites,
+    map,
+    visibleGroups: satelliteGroups.visible,
+    selectedId: selectedSatelliteId,
+    onSelect: selectSatellite,
+  });
+  const {flyToSatellite} = satellites;
+  const closeSatellite = useCallback(() => {
+    setSatelliteParam(null);
+  }, [setSatelliteParam]);
+  const flyToFollowed = useCallback(() => {
+    if (selectedSatelliteId !== null) {
+      flyToSatellite(selectedSatelliteId);
+    }
+  }, [flyToSatellite, selectedSatelliteId]);
+
+  // While the layer is on, search also finds satellites by name or number.
+  const satelliteCatalog =
+    satellites.state.status === 'ready' ? satellites.state.catalog : null;
+  const satelliteSearch = useMemo((): ExtraSearchGroup | undefined => {
+    if (satelliteCatalog === null) {
+      return undefined;
+    }
+    return {
+      heading: 'Satellites',
+      search: query =>
+        searchSatellites(query, satelliteCatalog, MAX_SATELLITE_RESULTS).map(
+          position => {
+            const id = satelliteCatalog.ids[position] ?? 0;
+            const group = satelliteCatalog.groups[position] ?? 'other';
+            const style = SATELLITE_GROUP_STYLES[group];
+            return {
+              key: String(id),
+              label: satelliteCatalog.names[position] ?? String(id),
+              detail: `${style.label} · No. ${String(id)}`,
+              color: style.color,
+              onSelect: () => {
+                selectSatellite(id);
+                flyToSatellite(id);
+              },
+            };
+          },
+        ),
+    };
+  }, [satelliteCatalog, selectSatellite, flyToSatellite]);
 
   // The view in the URL: read once as the starting view, then rewritten
   // (without new history entries) each time the camera stops.
@@ -243,7 +343,10 @@ export function App(): React.JSX.Element {
             initialView={initialView}
             onViewChange={recordView}
             onSelectCamera={selectCamera}
-            isDetailOpen={detail.status !== 'idle'}
+            onMapReady={setMap}
+            isDetailOpen={
+              detail.status !== 'idle' || satellites.followed !== null
+            }
             credits={<CreditBar active={activeLayers.active} />}
           />
         </Suspense>
@@ -263,14 +366,29 @@ export function App(): React.JSX.Element {
                 onSelect={selectQuake}
               />
             ),
+            [SATELLITE_LAYER_ID]: (
+              <SatelliteControls
+                state={satellites.state}
+                filter={satelliteGroups}
+              />
+            ),
           }}
           className="absolute top-24 left-4"
         />
         <CameraDetailPanel detail={detail} onClose={closeDetail} />
+        {satelliteCatalog !== null && satellites.followed !== null && (
+          <SatelliteDetailPanel
+            catalog={satelliteCatalog}
+            followed={satellites.followed}
+            onFlyTo={flyToFollowed}
+            onClose={closeSatellite}
+          />
+        )}
         <SearchDialog
           open={isSearchOpen}
           onOpenChange={setIsSearchOpen}
           onSelectCamera={selectSearchResult}
+          extra={satelliteSearch}
         />
       </div>
     </AppErrorBoundary>
