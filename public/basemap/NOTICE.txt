@@ -1,0 +1,12 @@
+Map label fonts and icons for the OrbitalGaze basemap.
+
+Source: https://github.com/protomaps/basemaps-assets
+Commit: 028c18f713baecad011301ff7a69acc39bcc2ae7 (downloaded 2026-11-19)
+
+- fonts/: Noto Sans Regular, Medium and Italic as MapLibre glyph ranges
+  (PBF). SIL Open Font License 1.1, see fonts/OFL.txt.
+- sprites/: the Protomaps "dark" icon sheet (v4), derived from
+  tangrams/icons. MIT License, see sprites/LICENSE.txt.
+
+Map data itself (OpenStreetMap, ODbL) is served by the Worker from R2,
+not from this folder.

@@ -93,12 +93,3 @@
     -webkit-font-smoothing: antialiased;
   }
 }
-
-/*
- * Cesium's imagery credits. Cesium normally pins its credit box to the
- * bottom of the globe; inside the app's credit strip (globe_view.tsx) it
- * flows like normal content instead, so it never overlaps the other credits.
- */
-.og-imagery-credits .cesium-widget-credits {
-  position: static;
-}

@@ -3,10 +3,11 @@
  *
  * Layer: end-to-end tests (a real Chromium against the production build).
  *
- * These confirm the pieces that unit tests can't: the Cesium runtime files are
- * served from our origin, WebGL starts, the API answers through the Worker,
- * static files carry their security headers, and the interface has no
- * automatically detectable accessibility problems.
+ * These confirm the pieces that unit tests can't: WebGL starts, the map's
+ * tiles, fonts and icons come from our own origin, the API answers through
+ * the Worker, static files carry their security headers, and the interface
+ * has no automatically detectable accessibility problems. (The local basemap
+ * is a synthetic archive from `pnpm basemap:seed`.)
  */
 import AxeBuilder from '@axe-core/playwright';
 import {expect, test} from '@playwright/test';
@@ -35,19 +36,44 @@ test('the globe renders and reports ready', async ({page}) => {
   await expect(page.locator('canvas')).toBeVisible();
 });
 
-test("Cesium's runtime files are served from our origin", async ({request}) => {
-  // Cesium loads these from CESIUM_BASE_URL at run time. If the build copies
-  // them anywhere else, the app's fallback page is served instead and the
-  // globe never finishes loading.
-  const worker = await request.get('/cesium/Workers/transferTypedArrayTest.js');
-  expect(worker.status()).toBe(200);
-  expect(worker.headers()['content-type']).toContain('javascript');
+test('the globe loads its map tiles from our own origin', async ({page}) => {
+  // Step 1: note every basemap tile response while the globe loads.
+  const tileStatuses: number[] = [];
+  page.on('response', response => {
+    const url = new URL(response.url());
+    if (url.pathname.startsWith('/api/v1/basemap/tiles/')) {
+      tileStatuses.push(response.status());
+    }
+  });
 
-  const asset = await request.get(
-    '/cesium/Assets/approximateTerrainHeights.json',
+  await page.goto('/');
+  await expect(page.locator('[data-globe-status="ready"]')).toBeVisible({
+    timeout: GLOBE_READY_TIMEOUT_MS,
+  });
+
+  // Step 2: tiles came from our Worker, and the map's credit is shown.
+  expect(tileStatuses.length).toBeGreaterThan(0);
+  expect(tileStatuses.every(status => status === 200)).toBe(true);
+  await expect(
+    page.getByRole('link', {name: '© OpenStreetMap contributors'}),
+  ).toBeVisible();
+});
+
+test("the map's fonts and icons are served from our origin", async ({
+  request,
+}) => {
+  // If the build doesn't copy them, the app's fallback page is served
+  // instead and labels never appear.
+  const glyphs = await request.get(
+    '/basemap/fonts/Noto%20Sans%20Medium/0-255.pbf',
   );
-  expect(asset.status()).toBe(200);
-  expect(asset.headers()['content-type']).toContain('json');
+  expect(glyphs.status()).toBe(200);
+  // Glyph ranges are binary; the fallback page would start with "<".
+  expect((await glyphs.body()).subarray(0, 1).toString()).not.toBe('<');
+
+  const sprite = await request.get('/basemap/sprites/dark.json');
+  expect(sprite.status()).toBe(200);
+  expect(sprite.headers()['content-type']).toContain('json');
 });
 
 test('the local environment badge comes from the API', async ({page}) => {
@@ -69,11 +95,13 @@ test('the app page carries the static security headers', async ({request}) => {
   expect(csp).toContain('img-src');
   expect(csp).toContain('https://imgproxy.windy.com');
   expect(csp).toContain('frame-src https://webcams.windy.com;');
-  // Scripts: our own, WebAssembly for Cesium, and Cloudflare Web Analytics
-  // only. Never 'unsafe-eval' or 'unsafe-inline'.
+  // Scripts: our own and Cloudflare Web Analytics only. Never
+  // 'unsafe-eval', 'unsafe-inline', or WebAssembly.
   expect(csp).toContain(
-    "script-src 'self' 'wasm-unsafe-eval' https://static.cloudflareinsights.com;",
+    "script-src 'self' https://static.cloudflareinsights.com;",
   );
+  // No third-party map hosts are left.
+  expect(csp).not.toMatch(/cesium|virtualearth/);
   expect(csp).toContain('report-uri /api/v1/csp-reports');
 });
 
@@ -95,8 +123,8 @@ test('loading the globe causes no browser policy violations', async ({
   });
 
   // Step 2: load the page and let the globe and the camera index finish.
-  // That loads all of Cesium and parses API responses with Zod, the two
-  // places that used to evaluate strings.
+  // That loads the map library and its workers, and parses API responses
+  // with Zod.
   await page.goto('/');
   await expect(page.locator('[data-globe-status="ready"]')).toBeVisible({
     timeout: GLOBE_READY_TIMEOUT_MS,
@@ -137,8 +165,7 @@ test('the interface overlays have no detectable accessibility violations', async
     timeout: GLOBE_READY_TIMEOUT_MS,
   });
 
-  // The Cesium canvas and its credit strip are third-party markup; check our
-  // own interface.
+  // The map canvas is third-party markup; check our own interface.
   const results = await new AxeBuilder({page}).include('header').analyze();
 
   expect(results.violations).toEqual([]);
