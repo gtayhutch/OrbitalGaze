@@ -5,7 +5,7 @@
     "tsBuildInfoFile": "./node_modules/.cache/tsc/client.tsbuildinfo",
     "lib": ["ES2024", "DOM", "DOM.Iterable"],
     "jsx": "react-jsx",
-    "types": ["vite/client", "@testing-library/jest-dom/vitest"]
+    "types": ["vite/client", "geojson", "@testing-library/jest-dom/vitest"]
   },
   "include": ["src/client", "src/shared"]
 }

@@ -4,9 +4,9 @@
  * Layer: client feature (browser only).
  *
  * Data hooks, panels, layer controls, and category styles for the camera
- * layer. The layer's credit lives in the layer registry. The Cesium
- * pins themselves live in the globe feature, which owns everything that
- * touches Cesium so it can be loaded lazily.
+ * layer. The layer's credit lives in the layer registry. The map pins
+ * themselves live in the globe feature, which owns everything that touches
+ * MapLibre so it can be loaded lazily.
  */
 export {CATEGORY_STYLES, type CategoryStyle} from './category_style';
 export {

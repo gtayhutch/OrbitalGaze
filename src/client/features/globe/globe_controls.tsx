@@ -7,29 +7,26 @@
  * give keyboard and screen-reader users the same control, and a quick way
  * back to the whole-Earth view.
  */
-import type {Viewer} from 'cesium';
 import {LocateFixed, Minus, Plus} from 'lucide-react';
+import type {Map as MapLibreMap} from 'maplibre-gl';
 import type {RefObject} from 'react';
 
 import {Button} from '@/client/components/ui/button';
 import {prefersReducedMotion} from '@/client/lib/motion';
 import {cn} from '@/client/lib/utils';
-import {requestRender} from './request_render';
 
-/**
- * Fraction of the current height above ground that one zoom step moves.
- * Zooming by a fraction feels the same whether you're over a city or in
- * orbit.
- */
-const ZOOM_STEP_FRACTION = 0.5;
+import {HOME_VIEW} from './create_map';
 
-/** Duration of the flight back to the whole-Earth view, in seconds. */
-const RESET_FLIGHT_SECONDS = 1.5;
+/** Duration of one zoom step, in milliseconds (0 with reduced motion). */
+const ZOOM_STEP_MS = 300;
+
+/** Duration of the flight back to the whole-Earth view, in milliseconds. */
+const RESET_FLIGHT_MS = 1_500;
 
 /** Props for {@link GlobeControls}. */
 export interface GlobeControlsProps {
-  /** The globe's viewer; buttons do nothing while it is absent. */
-  viewerRef: RefObject<Viewer | null>;
+  /** The globe's map; buttons do nothing while it is absent. */
+  mapRef: RefObject<MapLibreMap | null>;
   /** Extra classes for positioning. */
   className?: string;
 }
@@ -38,32 +35,38 @@ export interface GlobeControlsProps {
  * Vertical stack of zoom in, zoom out, and reset-view buttons.
  *
  * @example
- * <GlobeControls viewerRef={viewerRef} className="absolute right-4 top-1/2" />
+ * <GlobeControls mapRef={mapRef} className="absolute right-4 top-1/2" />
  */
 export function GlobeControls({
-  viewerRef,
+  mapRef,
   className,
 }: GlobeControlsProps): React.JSX.Element {
-  /** Moves the camera toward (`direction` 1) or away from (-1) the ground. */
+  const duration = (milliseconds: number): number =>
+    prefersReducedMotion() ? 0 : milliseconds;
+
+  /** Zooms one level in or out around the centre of the view. */
   const zoom = (direction: 1 | -1): void => {
-    const viewer = viewerRef.current;
-    if (viewer === null) {
+    const map = mapRef.current;
+    if (map === null) {
       return;
     }
-    const height = viewer.camera.positionCartographic.height;
     if (direction === 1) {
-      viewer.camera.zoomIn(height * ZOOM_STEP_FRACTION);
+      map.zoomIn({duration: duration(ZOOM_STEP_MS)});
     } else {
-      viewer.camera.zoomOut(height * ZOOM_STEP_FRACTION);
+      map.zoomOut({duration: duration(ZOOM_STEP_MS)});
     }
-    requestRender(viewer);
   };
 
-  /** Flies back to the starting whole-Earth view. */
+  /** Flies back to the starting whole-Earth view, north up. */
   const resetView = (): void => {
-    viewerRef.current?.camera.flyHome(
-      prefersReducedMotion() ? 0 : RESET_FLIGHT_SECONDS,
-    );
+    mapRef.current?.flyTo({
+      center: [HOME_VIEW.lng, HOME_VIEW.lat],
+      zoom: HOME_VIEW.zoom,
+      bearing: HOME_VIEW.bearing,
+      pitch: HOME_VIEW.pitch,
+      duration: duration(RESET_FLIGHT_MS),
+      essential: true,
+    });
   };
 
   return (

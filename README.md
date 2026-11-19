@@ -24,13 +24,14 @@ compiler API through Microsoft's compatibility package.
 
 ## How it's built
 
-| Part                | Technology                                     |
-| ------------------- | ---------------------------------------------- |
-| Globe and interface | React, Vite, CesiumJS, Tailwind CSS, shadcn/ui |
-| API and edge logic  | Hono on Cloudflare Workers                     |
-| Data                | Cloudflare D1 (SQLite) and R2                  |
-| Background jobs     | Cloudflare Cron Triggers and Queues            |
-| Tests               | Vitest, Playwright                             |
+| Part                | Technology                                           |
+| ------------------- | ---------------------------------------------------- |
+| Globe and interface | React, Vite, MapLibre GL JS, Tailwind CSS, shadcn/ui |
+| API and edge logic  | Hono on Cloudflare Workers                           |
+| Data                | Cloudflare D1 (SQLite) and R2                        |
+| Map                 | Protomaps vector tiles, served from R2               |
+| Background jobs     | Cloudflare Cron Triggers and Queues                  |
+| Tests               | Vitest, Playwright                                   |
 
 Source layout:
 
@@ -53,8 +54,12 @@ function and component is documented where it's defined.
 - The [USGS Earthquake Hazards Program](https://earthquake.usgs.gov/) provides
   earthquake data. The layer shows magnitude, depth, local event time, and
   attribution.
-- [Cesium ion](https://cesium.com/ion/) supplies hosted globe imagery. Local
-  builds use the bundled Natural Earth II imagery when an ion token is absent.
+- The map uses [OpenStreetMap](https://www.openstreetmap.org/copyright) data
+  (© OpenStreetMap contributors, ODbL) from a [Protomaps](https://protomaps.com)
+  planet build, served from our own storage. Label fonts are Noto Sans (SIL
+  Open Font License) and map icons come from Protomaps' basemap assets (MIT);
+  see `public/basemap/NOTICE.txt`. `pnpm basemap:seed` loads a small
+  synthetic map for local development.
 
 ## License
 

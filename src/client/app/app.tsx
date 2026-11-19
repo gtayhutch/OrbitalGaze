@@ -27,7 +27,7 @@
  * choices. A layer that is off draws nothing, and its credit leaves the
  * credit bar.
  *
- * The globe is loaded lazily: CesiumJS is several megabytes, so the shell
+ * The globe is loaded lazily: MapLibre is over a megabyte, so the shell
  * (brand, panels) appears first and the globe streams in behind it.
  * Everything is wrapped in an error boundary so a failure shows a recovery
  * screen instead of a blank page.
