@@ -7,7 +7,7 @@
  * screen (Windy, for example, asks for "Webcams provided by windy.com — add
  * a webcam" with both links). The bar lists the credit of each active layer,
  * taken from the layer registry, and disappears when no layer is on. The
- * imagery credits are separate; Cesium writes them next to this bar.
+ * basemap's credit is separate; the globe shows it below this bar.
  */
 import {cn} from '@/client/lib/utils';
 

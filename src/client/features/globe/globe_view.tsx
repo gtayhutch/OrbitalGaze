@@ -3,39 +3,45 @@
  *
  * Layer: client feature (browser only). Rendered by the app shell.
  *
- * CesiumJS manages its own canvas, render loop, and web workers outside
+ * MapLibre manages its own canvas, render loop, and web workers outside
  * React. This component bridges the two:
- * - A ref callback creates the viewer and the camera pin layer when the
- *   container element appears, and destroys both when it goes away.
+ * - A ref callback creates the map and the camera and earthquake layers
+ *   when the container element appears, and removes them when it goes away.
  * - Effects push React props (cameras, visible categories, the selected
- *   camera, the point to fly to) into the pin layer whenever they change.
- * - A share link's view is applied once, when the viewer is created, and
- *   each time the camera stops moving its new view is reported back (for
- *   the URL), so a link or a reload opens the same view.
- * - Cesium's loading progress becomes React state for the loading and error
- *   overlays.
+ *   camera, earthquakes, the point to fly to) into the layers whenever they
+ *   change.
+ * - A share link's view is applied once, when the map is created, and each
+ *   time the camera stops moving its new view is reported back (for the
+ *   URL), so a link or a reload opens the same view.
+ * - The basemap (land, roads, labels) is added once the Worker describes
+ *   it. Without one (a fresh local checkout), the globe still works, plain.
  *
- * Credits: Cesium writes the imagery credits into a strip this component
- * owns (instead of the bottom of its canvas), next to any extra credits the
- * app passes in, so the whole strip stays visible above the phone bottom
- * sheet.
+ * Credits: the basemap's credit (OpenStreetMap and Protomaps) sits in a strip
+ * this component owns, next to any extra credits the app passes in, so the
+ * whole strip stays visible above the phone bottom sheet.
  *
  * The component's status is also exposed as `data-globe-status` on its root
  * element ("loading", "ready", or "error"), which the end-to-end tests wait on.
  */
-import 'cesium/Build/Cesium/Widgets/widgets.css';
-
-import {Cartesian3, Math as CesiumMath, type Viewer} from 'cesium';
+import type {Map as MapLibreMap} from 'maplibre-gl';
 import {useCallback, useEffect, useRef, useState} from 'react';
 
-import {parseClientConfig} from '@/client/lib/config';
 import {reportBrowserError} from '@/client/lib/error_reporting';
 import {cn} from '@/client/lib/utils';
 import type {CameraCategory, CameraIndexEntry} from '@/shared/cameras';
+import type {Earthquake} from '@/shared/earthquakes';
 
+import {
+  BASEMAP_SOURCE_ID,
+  basemapLayers,
+  basemapSourceSpec,
+  fetchBasemapSource,
+  SPACE_COLOUR,
+  type BasemapSource,
+} from './basemap_style';
 import {createCameraLayer, type CameraLayer} from './camera_layer';
 import type {CameraView} from './camera_view';
-import {createGlobeViewer} from './create_globe_viewer';
+import {createGlobeMap} from './create_map';
 import {createEarthquakeLayer, type EarthquakeLayer} from './earthquake_layer';
 import {GlobeControls} from './globe_controls';
 
@@ -51,8 +57,6 @@ export interface GlobeFocus {
   readonly lat: number;
   readonly lng: number;
 }
-
-import type {Earthquake} from '@/shared/earthquakes';
 
 /** A stable empty set of earthquake points for callers without the layer. */
 const NO_EARTHQUAKES: readonly Earthquake[] = [];
@@ -74,7 +78,7 @@ export interface GlobeViewProps {
   selectedCameraId?: string | null;
   /**
    * Where the camera starts, for example from a share link. Read once,
-   * when the globe is created; `null` starts at Cesium's default view.
+   * when the globe is created; `null` starts on the whole Earth.
    */
   initialView?: CameraView | null;
   /** Called with the camera's view each time it stops moving. */
@@ -88,7 +92,7 @@ export interface GlobeViewProps {
    */
   isDetailOpen: boolean;
   /**
-   * The data credits shown above the imagery credits (the layers' credit
+   * The data credits shown above the basemap credit (the layers' credit
    * bar). It brings its own background, and may render nothing.
    */
   credits?: React.ReactNode;
@@ -97,8 +101,50 @@ export interface GlobeViewProps {
 }
 
 /**
- * The full interactive globe with camera pins, controls, and loading and
- * error overlays.
+ * Adds the basemap's source and layers beneath the app's own layers.
+ *
+ * @param map A map whose style has loaded.
+ * @param source The Worker's description of the basemap tiles.
+ */
+function addBasemap(map: MapLibreMap, source: BasemapSource): void {
+  map.addSource(BASEMAP_SOURCE_ID, basemapSourceSpec(source));
+  // At this point the style holds the background, then only our layers
+  // (earthquakes, cameras), so the basemap goes right above the background.
+  const firstOverlay = map.getStyle().layers[1]?.id;
+  for (const layer of basemapLayers()) {
+    map.addLayer(layer, firstOverlay);
+  }
+}
+
+/** Resolves once the map's style has loaded. */
+function styleLoaded(map: MapLibreMap): Promise<void> {
+  return new Promise(resolve => {
+    if (map.isStyleLoaded() === true) {
+      resolve();
+    } else {
+      map.once('load', () => {
+        resolve();
+      });
+    }
+  });
+}
+
+/** The camera's current view, in share-link terms. */
+function currentView(map: MapLibreMap): CameraView {
+  // After spinning the globe the longitude can pass ±180; wrap it back.
+  const center = map.getCenter().wrap();
+  return {
+    lng: center.lng,
+    lat: center.lat,
+    zoom: map.getZoom(),
+    bearing: map.getBearing(),
+    pitch: map.getPitch(),
+  };
+}
+
+/**
+ * The full interactive globe with camera pins, earthquakes, controls, and
+ * loading and error overlays.
  *
  * @example
  * <GlobeView
@@ -126,10 +172,8 @@ export function GlobeView({
   className,
 }: GlobeViewProps): React.JSX.Element {
   const [status, setStatus] = useState<GlobeStatus>('loading');
-  const viewerRef = useRef<Viewer | null>(null);
-  // Cesium writes its imagery credits into this element. It is rendered
-  // before the globe container, so it exists when the viewer is created.
-  const imageryCreditsRef = useRef<HTMLDivElement>(null);
+  const [hasBasemap, setHasBasemap] = useState(false);
+  const mapRef = useRef<MapLibreMap | null>(null);
   const layerRef = useRef<CameraLayer | null>(null);
   const earthquakeLayerRef = useRef<EarthquakeLayer | null>(null);
   // The latest click handler, read when a pin is clicked, so the layer never
@@ -148,14 +192,11 @@ export function GlobeView({
 
   // Stable across renders, so React attaches the globe once per element.
   const attachGlobe = useCallback((container: HTMLDivElement) => {
-    // Step 1: create the viewer. Failure here almost always means WebGL is
+    // Step 1: create the map. Failure here almost always means WebGL is
     // unavailable, which the error overlay explains to the user.
-    let viewer: Viewer;
+    let map: MapLibreMap;
     try {
-      viewer = createGlobeViewer(container, {
-        ...parseClientConfig(),
-        creditContainer: imageryCreditsRef.current ?? undefined,
-      });
+      map = createGlobeMap(container, initialViewRef.current);
     } catch (error) {
       console.error('Could not start the globe.', error);
       reportBrowserError('browser.globe-start', error);
@@ -163,67 +204,63 @@ export function GlobeView({
       return undefined;
     }
     setStatus('loading');
-    viewerRef.current = viewer;
+    mapRef.current = map;
+    const teardown = new AbortController();
 
-    // Start where a share link (or the last visit's URL) says, then report
-    // every settled view so the URL can follow it.
-    const startView = initialViewRef.current;
-    if (startView !== null) {
-      viewer.camera.setView({
-        destination: Cartesian3.fromDegrees(
-          startView.lng,
-          startView.lat,
-          startView.height,
-        ),
-        orientation: {
-          heading: CesiumMath.toRadians(startView.heading),
-          pitch: CesiumMath.toRadians(startView.pitch),
-          roll: 0,
-        },
-      });
-    }
-    viewer.camera.moveEnd.addEventListener(() => {
-      const {longitude, latitude, height} = viewer.camera.positionCartographic;
-      onViewChangeRef.current?.({
-        lng: CesiumMath.toDegrees(longitude),
-        lat: CesiumMath.toDegrees(latitude),
-        height,
-        heading: CesiumMath.toDegrees(viewer.camera.heading),
-        pitch: CesiumMath.toDegrees(viewer.camera.pitch),
-      });
-    });
-    layerRef.current = createCameraLayer(viewer, cameraId => {
+    // Step 2: our layers, and the view reports for the URL.
+    layerRef.current = createCameraLayer(map, cameraId => {
       onSelectRef.current(cameraId);
     });
-
-    earthquakeLayerRef.current = createEarthquakeLayer(viewer);
-
-    // Step 2: report "ready" after the first frame in which every visible
-    // tile has loaded, then stop listening. Each finished tile requests a new
-    // frame, so this check runs again until loading completes.
-    const removeReadyListener = viewer.scene.postRender.addEventListener(() => {
-      if (viewer.scene.globe.tilesLoaded) {
-        setStatus('ready');
-        removeReadyListener();
-      }
+    earthquakeLayerRef.current = createEarthquakeLayer(map);
+    map.on('moveend', () => {
+      onViewChangeRef.current?.(currentView(map));
     });
 
-    // Step 3: when the element goes away, release the pins, the WebGL
+    // Step 3: the basemap. Its description loads while the style does; a
+    // site without a basemap (404) or a failed request leaves the globe
+    // plain but working.
+    const basemap = fetchBasemapSource(
+      window.location.origin,
+      teardown.signal,
+    ).catch((error: unknown) => {
+      if (!teardown.signal.aborted) {
+        console.error('Could not load the basemap.', error);
+        reportBrowserError('browser.globe-start', error);
+      }
+      return null;
+    });
+    void Promise.all([styleLoaded(map), basemap]).then(([, source]) => {
+      if (teardown.signal.aborted) {
+        return;
+      }
+      if (source !== null) {
+        addBasemap(map, source);
+        setHasBasemap(true);
+      }
+      // Step 4: "ready" once the first view has fully drawn, tiles included.
+      // The repaint guarantees one more frame, and so one more `idle`.
+      map.once('idle', () => {
+        setStatus('ready');
+      });
+      map.triggerRepaint();
+    });
+
+    // Step 5: when the element goes away, release the layers, the WebGL
     // context, web workers, and listeners.
     return () => {
-      removeReadyListener();
+      teardown.abort();
       layerRef.current?.destroy();
+      earthquakeLayerRef.current?.destroy();
       layerRef.current = null;
       earthquakeLayerRef.current = null;
-      viewerRef.current = null;
-      if (!viewer.isDestroyed()) {
-        viewer.destroy();
-      }
+      mapRef.current = null;
+      map.remove();
     };
   }, []);
 
-  // Push props into the pin layer. Effects run after the ref callback, so the
-  // layer exists by then (unless the globe failed to start).
+  // Push props into the layers. Effects run after the ref callback, so the
+  // layers exist by then (unless the globe failed to start); they draw as
+  // soon as the style has loaded.
   useEffect(() => {
     layerRef.current?.setVisibleCategories(visibleCategories);
   }, [visibleCategories]);
@@ -249,9 +286,16 @@ export function GlobeView({
   }, [focus]);
 
   return (
-    <div className={cn('bg-background', className)} data-globe-status={status}>
-      {/* Credit strip: the imagery providers' credits (required by their
-          terms) and any extra credits, always visible. On phones it moves
+    <div
+      className={className}
+      data-globe-status={status}
+      // Space around the globe: a faint glow behind the atmosphere.
+      style={{
+        background: `radial-gradient(ellipse at center, #0b1526 0%, ${SPACE_COLOUR} 70%)`,
+      }}
+    >
+      {/* Credit strip: the data credits and the basemap's credit (required
+          by OpenStreetMap's licence), always visible. On phones it moves
           above the bottom sheet, whose height is BOTTOM_SHEET_HEIGHT_CLASS
           in the cameras feature. */}
       <div
@@ -261,17 +305,37 @@ export function GlobeView({
         )}
       >
         {credits}
-        <div ref={imageryCreditsRef} className="og-imagery-credits" />
+        {hasBasemap && (
+          <p className="rounded bg-background/70 px-1.5 py-0.5 backdrop-blur-sm">
+            <a
+              href="https://www.openstreetmap.org/copyright"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline underline-offset-2 hover:text-foreground"
+            >
+              © OpenStreetMap contributors
+            </a>
+            {' · '}
+            <a
+              href="https://protomaps.com"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline underline-offset-2 hover:text-foreground"
+            >
+              Protomaps
+            </a>
+          </p>
+        )}
       </div>
       <div
         ref={attachGlobe}
         className="h-full w-full"
         role="application"
-        aria-label="Interactive 3D globe. Drag to rotate; scroll or pinch to zoom. Use search for cameras, or the layer panel for earthquake details."
+        aria-label="Interactive 3D globe. Drag to rotate; scroll or pinch to zoom; arrow keys pan when focused. Use search for cameras, or the layer panel for earthquake details."
       />
       {status === 'ready' && (
         <GlobeControls
-          viewerRef={viewerRef}
+          mapRef={mapRef}
           className={cn(
             'absolute top-24 right-4 md:top-1/2 md:-translate-y-1/2',
             isDetailOpen && 'md:right-[26rem]',

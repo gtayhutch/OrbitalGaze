@@ -40,6 +40,10 @@
   // Non-secret settings. Secrets are never stored in this file.
   "vars": {
     "APP_ENV": "test",
+    // The basemap archive's object key in the BASEMAP bucket. Archives are
+    // versioned by key; switching basemaps is a new key here, never an
+    // overwrite. Locally the bucket is empty until a basemap is seeded.
+    "BASEMAP_ARCHIVE": "planet/local.pmtiles",
   },
 
   "d1_databases": [
@@ -90,6 +94,10 @@
       "binding": "LAYER_SNAPSHOTS",
       "bucket_name": "orbitalgaze-layer-snapshots-local",
     },
+    {
+      "binding": "BASEMAP",
+      "bucket_name": "orbitalgaze-basemap-local",
+    },
   ],
 
   // Per-address request budgets (see src/worker/lib/rate_limit.ts). Rate
@@ -105,6 +113,11 @@
       "namespace_id": "1002",
       "simple": {"limit": 30, "period": 60},
     },
+    {
+      "name": "TILES_RATE_LIMITER",
+      "namespace_id": "1003",
+      "simple": {"limit": 2400, "period": 60},
+    },
   ],
 
   "env": {
@@ -116,7 +129,10 @@
       "routes": [{"pattern": "staging.orbitalgaze.com", "custom_domain": true}],
       "workers_dev": false,
       "preview_urls": false,
-      "vars": {"APP_ENV": "staging"},
+      "vars": {
+        "APP_ENV": "staging",
+        "BASEMAP_ARCHIVE": "planet/20261118.pmtiles",
+      },
       "secrets": {"required": ["WINDY_API_KEY"]},
       "queues": {
         "producers": [
@@ -140,6 +156,10 @@
           "binding": "LAYER_SNAPSHOTS",
           "bucket_name": "orbitalgaze-layer-snapshots-staging",
         },
+        {
+          "binding": "BASEMAP",
+          "bucket_name": "orbitalgaze-basemap-staging",
+        },
       ],
       "ratelimits": [
         {
@@ -151,6 +171,11 @@
           "name": "SEARCH_RATE_LIMITER",
           "namespace_id": "2002",
           "simple": {"limit": 30, "period": 60},
+        },
+        {
+          "name": "TILES_RATE_LIMITER",
+          "namespace_id": "2003",
+          "simple": {"limit": 2400, "period": 60},
         },
       ],
       "d1_databases": [
@@ -170,7 +195,10 @@
       "routes": [{"pattern": "orbitalgaze.com", "custom_domain": true}],
       "workers_dev": false,
       "preview_urls": false,
-      "vars": {"APP_ENV": "production"},
+      "vars": {
+        "APP_ENV": "production",
+        "BASEMAP_ARCHIVE": "planet/20261118.pmtiles",
+      },
       "secrets": {"required": ["WINDY_API_KEY"]},
       "queues": {
         "producers": [
@@ -194,6 +222,10 @@
           "binding": "LAYER_SNAPSHOTS",
           "bucket_name": "orbitalgaze-layer-snapshots-production",
         },
+        {
+          "binding": "BASEMAP",
+          "bucket_name": "orbitalgaze-basemap-production",
+        },
       ],
       "ratelimits": [
         {
@@ -205,6 +237,11 @@
           "name": "SEARCH_RATE_LIMITER",
           "namespace_id": "3002",
           "simple": {"limit": 30, "period": 60},
+        },
+        {
+          "name": "TILES_RATE_LIMITER",
+          "namespace_id": "3003",
+          "simple": {"limit": 2400, "period": 60},
         },
       ],
       "d1_databases": [

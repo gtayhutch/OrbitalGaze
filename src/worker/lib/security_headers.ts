@@ -3,7 +3,7 @@
  *
  * Layer: worker library (server only).
  *
- * Static files (the app's HTML, scripts, and Cesium assets) get their headers
+ * Static files (the app's HTML, scripts, and map fonts) get their headers
  * from `public/_headers`. API responses come from Worker code instead, so they
  * get theirs from this middleware. API responses are JSON and never render as
  * pages, so their Content Security Policy forbids everything.

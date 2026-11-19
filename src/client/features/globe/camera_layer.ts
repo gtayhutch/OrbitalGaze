@@ -3,42 +3,27 @@
  *
  * Layer: client feature (browser only). Created and driven by `globe_view.tsx`.
  *
- * Pins are billboards in one `BillboardCollection`, which Cesium draws in a
- * single batch. That is much lighter than one entity per camera, and it
- * scales to the many point layers to come.
+ * Pins come from two GeoJSON sources:
+ * - `cameras`: every visible camera except the selected one. MapLibre
+ *   clusters it on the fly: pins closer than {@link CLUSTER_RADIUS_PX}
+ *   pixels merge into a numbered teal bubble, and every pin shows on its own
+ *   from zoom {@link NO_CLUSTER_FROM_ZOOM} (city scale).
+ * - `selected-camera`: the selected camera alone, drawn larger with a white
+ *   ring, so it is never hidden inside a cluster.
  *
- * Clustering is our own screen-space clustering (`grid_cluster.ts`):
- * - each camera is projected to the screen, and pins within
- *   `CLUSTER_PIXEL_RANGE` of each other merge. That is what "would overlap"
- *   means, wherever the camera is on the globe, including near its edge
- *   where distances look squashed;
- * - cameras on the far side of the Earth, and every camera once the view is
- *   close to the ground, stay single;
- * - pins are rebuilt when the camera stops moving and when the cameras,
- *   filter or selection change, never on every frame;
- * - the selected camera always keeps its own pin, drawn larger and on top.
+ * Clicking a pin selects its camera; clicking a cluster zooms in until it
+ * splits. Pins use each category's colour from `CATEGORY_STYLES`.
  *
- * Clicking a single pin selects that camera; clicking a numbered cluster
- * zooms to the area its cameras cover.
- *
- * Pin images are drawn once per category (and once per cluster count) with
- * Cesium's `PinBuilder` and cached. The collection stores each distinct
- * image once, so thousands of pins share a handful of textures.
+ * The layer can be created before the map's style has loaded: it keeps the
+ * latest cameras, filter and selection, and adds its sources and layers as
+ * soon as the style is ready.
  */
-import {
-  BillboardCollection,
-  Cartesian2,
-  Cartesian3,
-  Color,
-  Ellipsoid,
-  EllipsoidalOccluder,
-  PinBuilder,
-  Rectangle,
-  ScreenSpaceEventHandler,
-  ScreenSpaceEventType,
-  VerticalOrigin,
-  type Viewer,
-} from 'cesium';
+import type {
+  ExpressionSpecification,
+  GeoJSONSource,
+  Map as MapLibreMap,
+  MapLayerMouseEvent,
+} from 'maplibre-gl';
 
 import {CATEGORY_STYLES} from '@/client/features/cameras';
 import {prefersReducedMotion} from '@/client/lib/motion';
@@ -49,66 +34,52 @@ import {
 } from '@/shared/cameras';
 
 import {
-  clusterPoints,
-  type PointCluster,
-  type ScreenPosition,
-} from './grid_cluster';
-import {requestRender} from './request_render';
+  cameraPoints,
+  categoryColourPairs,
+  emptyCollection,
+  type PointCollection,
+} from './point_features';
 
-/** Pin height for a single camera, in screen pixels. */
-const CAMERA_PIN_SIZE_PX = 36;
+/** Source IDs. */
+const CAMERAS_SOURCE = 'cameras';
+const SELECTED_SOURCE = 'selected-camera';
 
-/** Pin height for a cluster, in screen pixels. */
-const CLUSTER_PIN_SIZE_PX = 48;
-
-/** Color of cluster pins (the app's teal accent, darkened for contrast with white digits). */
-const CLUSTER_PIN_COLOR = '#0f766e';
+/** Layer IDs, bottom to top. */
+export const CLUSTER_LAYER = 'camera-clusters';
+const CLUSTER_COUNT_LAYER = 'camera-cluster-counts';
+export const PIN_LAYER = 'camera-pins';
+export const SELECTED_PIN_LAYER = 'camera-selected';
 
 /** Pins closer than this many CSS pixels on screen merge into a cluster. */
-const CLUSTER_PIXEL_RANGE = 48;
+const CLUSTER_RADIUS_PX = 48;
 
 /**
- * Below this camera height, in metres, every pin shows on its own: at city
- * scale, a cluster would hide cameras the visitor is looking for.
+ * From this zoom on, every pin shows on its own: at city scale, a cluster
+ * would hide cameras the visitor is looking for.
  */
-const NO_CLUSTER_BELOW_METRES = 5_000;
+const NO_CLUSTER_FROM_ZOOM = 12;
 
-/** Clusters larger than this show "999+" instead of the exact count. */
-const MAX_CLUSTER_LABEL = 999;
+/** Colour of cluster bubbles (the app's teal accent, dark enough for white digits). */
+const CLUSTER_COLOUR = '#0f766e';
 
-/** How much larger the selected camera's pin is drawn. */
-const SELECTED_PIN_SCALE = 1.4;
+/** Ring around cluster bubbles. */
+const CLUSTER_RING_COLOUR = '#5eead4';
 
-/**
- * Pulls the selected pin towards the viewer, in metres, so it draws on top
- * of any pin it overlaps.
- */
-const SELECTED_PIN_EYE_OFFSET = new Cartesian3(0, 0, -50);
+/** Font for cluster counts; one of the self-hosted basemap fonts. */
+const COUNT_FONT = 'Noto Sans Medium';
 
-/**
- * Within this distance of the camera, in metres, pins skip the depth test so
- * they never clip into the ground at street level. It stays well inside the
- * horizon at the heights where it applies, so pins on the far side of the
- * Earth stay hidden.
- */
-const DISABLE_DEPTH_TEST_WITHIN_METRES = 100_000;
+/** Radius of a single pin, and of the selected pin, in CSS pixels. */
+const PIN_RADIUS_PX = 7;
+const SELECTED_PIN_RADIUS_PX = 10;
 
-/**
- * Height above the ground, in metres, when flying to a camera: about a city's
- * width in view.
- */
-const FLY_TO_HEIGHT_METRES = 40_000;
+/** Colour for a category the style doesn't know (never expected). */
+const FALLBACK_PIN_COLOUR = '#94a3b8';
 
-/** Duration of a camera flight, in seconds (0 with reduced motion). */
-const FLY_DURATION_SECONDS = 2;
+/** Zoom when flying to a camera: about a city's width in view. */
+export const FLY_TO_ZOOM = 11;
 
-/** Extra margin around a cluster's cameras when zooming to them, in degrees. */
-const CLUSTER_ZOOM_MARGIN_DEGREES = 0.05;
-
-/** What a click on a billboard refers to; stored as the billboard's `id`. */
-type PinTarget =
-  | {readonly kind: 'camera'; readonly cameraId: string}
-  | {readonly kind: 'cluster'; readonly cluster: PointCluster};
+/** Duration of a camera flight, in milliseconds (0 with reduced motion). */
+const FLY_DURATION_MS = 2_000;
 
 /** What the globe view can do with the camera pins. */
 export interface CameraLayer {
@@ -118,224 +89,195 @@ export interface CameraLayer {
   setVisibleCategories(visible: ReadonlySet<CameraCategory>): void;
   /** Highlights one camera's pin and keeps it out of clusters; `null` clears. */
   setSelected(cameraId: string | null): void;
-  /** Flies the view to a point above the given location. */
+  /** Flies the view to a camera's location. */
   flyTo(location: {readonly lat: number; readonly lng: number}): void;
-  /** Removes the pins and click handling. Call before destroying the viewer. */
+  /** Removes click handling. Call before `map.remove()`. */
   destroy(): void;
 }
 
-/** Narrows a picked object's `id` to one of our pin targets. */
-function asPinTarget(value: unknown): PinTarget | null {
-  if (typeof value !== 'object' || value === null || !('kind' in value)) {
-    return null;
-  }
-  // Safe: only this layer creates billboards with a `kind`.
-  return value as PinTarget;
+/** Each category's pin colour, as a MapLibre expression. */
+function pinColour(): ExpressionSpecification {
+  // Safe: the pairs alternate category and colour, as `match` expects.
+  return [
+    'match',
+    ['get', 'category'],
+    ...categoryColourPairs(category => CATEGORY_STYLES[category].color),
+    FALLBACK_PIN_COLOUR,
+  ] as unknown as ExpressionSpecification;
 }
 
-/** The area covered by a cluster's cameras, with a small margin. */
-function clusterRectangle(
-  ids: readonly string[],
-  cameraById: ReadonlyMap<string, CameraIndexEntry>,
-): Rectangle {
-  let west = 180;
-  let south = 90;
-  let east = -180;
-  let north = -90;
-  for (const id of ids) {
-    const camera = cameraById.get(id);
-    if (camera !== undefined) {
-      west = Math.min(west, camera.lng);
-      east = Math.max(east, camera.lng);
-      south = Math.min(south, camera.lat);
-      north = Math.max(north, camera.lat);
-    }
-  }
-  const margin = CLUSTER_ZOOM_MARGIN_DEGREES;
-  return Rectangle.fromDegrees(
-    Math.max(west - margin, -180),
-    Math.max(south - margin, -90),
-    Math.min(east + margin, 180),
-    Math.min(north + margin, 90),
-  );
+/** Hands a point collection to a GeoJSON source. */
+function setPoints(
+  map: MapLibreMap,
+  sourceId: string,
+  points: PointCollection,
+): void {
+  // The returned promise only signals when the workers finish; nothing
+  // waits for it.
+  void map.getSource<GeoJSONSource>(sourceId)?.setData(points);
+}
+
+/** Adds the camera sources and layers to a map whose style has loaded. */
+function addSourcesAndLayers(map: MapLibreMap): void {
+  map.addSource(CAMERAS_SOURCE, {
+    type: 'geojson',
+    data: emptyCollection(),
+    cluster: true,
+    clusterRadius: CLUSTER_RADIUS_PX,
+    clusterMaxZoom: NO_CLUSTER_FROM_ZOOM - 1,
+  });
+  map.addSource(SELECTED_SOURCE, {
+    type: 'geojson',
+    data: emptyCollection(),
+  });
+  map.addLayer({
+    id: CLUSTER_LAYER,
+    type: 'circle',
+    source: CAMERAS_SOURCE,
+    filter: ['has', 'point_count'],
+    paint: {
+      'circle-color': CLUSTER_COLOUR,
+      // Bigger bubbles for bigger clusters.
+      'circle-radius': ['step', ['get', 'point_count'], 13, 20, 17, 100, 22],
+      'circle-stroke-color': CLUSTER_RING_COLOUR,
+      'circle-stroke-width': 1.5,
+    },
+  });
+  map.addLayer({
+    id: CLUSTER_COUNT_LAYER,
+    type: 'symbol',
+    source: CAMERAS_SOURCE,
+    filter: ['has', 'point_count'],
+    layout: {
+      'text-field': ['get', 'point_count_abbreviated'],
+      'text-font': [COUNT_FONT],
+      'text-size': 12,
+      'text-allow-overlap': true,
+    },
+    paint: {'text-color': '#ffffff'},
+  });
+  map.addLayer({
+    id: PIN_LAYER,
+    type: 'circle',
+    source: CAMERAS_SOURCE,
+    filter: ['!', ['has', 'point_count']],
+    paint: {
+      'circle-color': pinColour(),
+      'circle-radius': PIN_RADIUS_PX,
+      'circle-stroke-color': '#020617',
+      'circle-stroke-width': 1.5,
+    },
+  });
+  map.addLayer({
+    id: SELECTED_PIN_LAYER,
+    type: 'circle',
+    source: SELECTED_SOURCE,
+    paint: {
+      'circle-color': pinColour(),
+      'circle-radius': SELECTED_PIN_RADIUS_PX,
+      'circle-stroke-color': '#ffffff',
+      'circle-stroke-width': 3,
+    },
+  });
 }
 
 /**
- * Adds the camera layer to `viewer`.
+ * Adds the camera layer to `map`.
  *
- * @param viewer The globe's viewer; it must outlive the layer.
+ * @param map The globe's map; it must outlive the layer.
  * @param onSelect Called with a camera's ID when its pin is clicked.
  * @returns The layer's controls.
  * @example
- * const layer = createCameraLayer(viewer, id => setSelectedId(id));
+ * const layer = createCameraLayer(map, id => setSelectedId(id));
  * layer.setCameras(index.cameras);
- * // later, before viewer.destroy():
+ * // later, before map.remove():
  * layer.destroy();
  */
 export function createCameraLayer(
-  viewer: Viewer,
+  map: MapLibreMap,
   onSelect: (cameraId: string) => void,
 ): CameraLayer {
-  const pinBuilder = new PinBuilder();
-  const billboards = viewer.scene.primitives.add(
-    new BillboardCollection({scene: viewer.scene}),
-  );
   let cameras: readonly CameraIndexEntry[] = [];
-  const cameraById = new Map<string, CameraIndexEntry>();
-  // Each camera's position on the globe, computed once per index load.
-  const positionById = new Map<string, Cartesian3>();
-  const screenScratch = new Cartesian2();
   let visibleCategories: ReadonlySet<CameraCategory> = new Set(
     CAMERA_CATEGORIES,
   );
   let selectedId: string | null = null;
+  let ready = false;
 
-  // Step 1: cached pin images.
-  const pinImageByCategory = new Map<CameraCategory, string>();
-  const pinImageFor = (category: CameraCategory): string => {
-    let image = pinImageByCategory.get(category);
-    if (image === undefined) {
-      image = pinBuilder
-        .fromColor(
-          Color.fromCssColorString(CATEGORY_STYLES[category].color),
-          CAMERA_PIN_SIZE_PX,
-        )
-        .toDataURL();
-      pinImageByCategory.set(category, image);
+  // Step 1: push the current state into the sources (once they exist).
+  const sync = (): void => {
+    if (!ready) {
+      return;
     }
-    return image;
-  };
-  const clusterImageByLabel = new Map<string, string>();
-  const clusterImageFor = (count: number): string => {
-    const label =
-      count > MAX_CLUSTER_LABEL ? `${MAX_CLUSTER_LABEL}+` : String(count);
-    let image = clusterImageByLabel.get(label);
-    if (image === undefined) {
-      image = pinBuilder
-        .fromText(
-          label,
-          Color.fromCssColorString(CLUSTER_PIN_COLOR),
-          CLUSTER_PIN_SIZE_PX,
-        )
-        .toDataURL();
-      clusterImageByLabel.set(label, image);
-    }
-    return image;
+    const points = cameraPoints(cameras, visibleCategories, selectedId);
+    setPoints(map, CAMERAS_SOURCE, points.clustered);
+    setPoints(map, SELECTED_SOURCE, points.selected);
   };
 
-  // Step 2: where a camera's pin is on screen in the current view; `null`
-  // (stay single) behind the Earth, off screen, or close to the ground.
-  const screenPositionFinder = (): ((
-    camera: CameraIndexEntry,
-  ) => ScreenPosition | null) => {
-    if (viewer.camera.positionCartographic.height < NO_CLUSTER_BELOW_METRES) {
-      return () => null;
+  // Step 2: clicks. A pin selects its camera; a cluster zooms in until it
+  // splits apart.
+  const onPinClick = (event: MapLayerMouseEvent): void => {
+    const id: unknown = event.features?.[0]?.properties['id'];
+    if (typeof id === 'string') {
+      onSelect(id);
     }
-    const occluder = new EllipsoidalOccluder(
-      Ellipsoid.WGS84,
-      viewer.camera.positionWC,
-    );
-    return camera => {
-      const position = positionById.get(camera.id);
-      if (position === undefined || !occluder.isPointVisible(position)) {
-        return null;
-      }
-      const onScreen = viewer.scene.cartesianToCanvasCoordinates(
-        position,
-        screenScratch,
-      );
-      return onScreen === undefined ? null : {x: onScreen.x, y: onScreen.y};
-    };
   };
-
-  // Step 3: (re)build every billboard for the current cameras, filter,
-  // selection, and view.
-  const rebuild = (): void => {
-    const visible = cameras.filter(camera =>
-      visibleCategories.has(camera.category),
-    );
-    const keepIds = selectedId === null ? undefined : new Set([selectedId]);
-    const {singles, clusters} = clusterPoints(visible, {
-      positionOf: screenPositionFinder(),
-      pixelRange: CLUSTER_PIXEL_RANGE,
-      ...(keepIds === undefined ? {} : {keepIds}),
-    });
-
-    billboards.removeAll();
-    for (const single of singles) {
-      const camera = cameraById.get(single.id);
-      if (camera === undefined) {
-        continue;
-      }
-      const isSelected = camera.id === selectedId;
-      billboards.add({
-        id: {kind: 'camera', cameraId: camera.id} satisfies PinTarget,
-        position:
-          positionById.get(camera.id) ??
-          Cartesian3.fromDegrees(camera.lng, camera.lat),
-        image: pinImageFor(camera.category),
-        verticalOrigin: VerticalOrigin.BOTTOM,
-        disableDepthTestDistance: DISABLE_DEPTH_TEST_WITHIN_METRES,
-        scale: isSelected ? SELECTED_PIN_SCALE : 1,
-        eyeOffset: isSelected ? SELECTED_PIN_EYE_OFFSET : Cartesian3.ZERO,
-      });
+  const onClusterClick = (event: MapLayerMouseEvent): void => {
+    const feature = event.features?.[0];
+    const clusterId: unknown = feature?.properties['cluster_id'];
+    if (feature?.geometry.type !== 'Point' || typeof clusterId !== 'number') {
+      return;
     }
-    for (const cluster of clusters) {
-      billboards.add({
-        id: {kind: 'cluster', cluster} satisfies PinTarget,
-        position: Cartesian3.fromDegrees(cluster.lng, cluster.lat),
-        image: clusterImageFor(cluster.ids.length),
-        verticalOrigin: VerticalOrigin.BOTTOM,
-        disableDepthTestDistance: DISABLE_DEPTH_TEST_WITHIN_METRES,
-      });
-    }
-    requestRender(viewer);
-  };
-
-  // Step 4: after the camera stops, re-cluster for the new view. About a
-  // thousand projections take a few milliseconds, once per movement.
-  const removeMoveEndListener = viewer.camera.moveEnd.addEventListener(rebuild);
-
-  // Step 5: clicks. A single pin selects its camera; a cluster zooms to the
-  // area its cameras cover.
-  const clickHandler = new ScreenSpaceEventHandler(viewer.scene.canvas);
-  clickHandler.setInputAction(
-    (event: ScreenSpaceEventHandler.PositionedEvent) => {
-      const picked: unknown = viewer.scene.pick(event.position);
-      if (typeof picked !== 'object' || picked === null || !('id' in picked)) {
-        return;
-      }
-      const target = asPinTarget(picked.id);
-      if (target?.kind === 'camera') {
-        onSelect(target.cameraId);
-      } else if (target?.kind === 'cluster') {
-        viewer.camera.flyTo({
-          destination: clusterRectangle(target.cluster.ids, cameraById),
-          duration: prefersReducedMotion() ? 0 : FLY_DURATION_SECONDS,
+    const [lng, lat] = feature.geometry.coordinates;
+    void map
+      .getSource<GeoJSONSource>(CAMERAS_SOURCE)
+      ?.getClusterExpansionZoom(clusterId)
+      .then(zoom => {
+        map.easeTo({
+          center: [lng ?? 0, lat ?? 0],
+          zoom,
+          duration: prefersReducedMotion() ? 0 : FLY_DURATION_MS / 2,
         });
-      }
-    },
-    ScreenSpaceEventType.LEFT_CLICK,
-  );
+      });
+  };
+  // A pointer cursor over anything clickable.
+  const showPointer = (): void => {
+    map.getCanvas().style.cursor = 'pointer';
+  };
+  const clearPointer = (): void => {
+    map.getCanvas().style.cursor = '';
+  };
+  const clickableLayers = [CLUSTER_LAYER, PIN_LAYER, SELECTED_PIN_LAYER];
+
+  // Step 3: once the style has loaded, add the sources, layers and click
+  // handlers, then draw the state collected so far.
+  const setUp = (): void => {
+    addSourcesAndLayers(map);
+    map.on('click', CLUSTER_LAYER, onClusterClick);
+    map.on('click', PIN_LAYER, onPinClick);
+    map.on('click', SELECTED_PIN_LAYER, onPinClick);
+    for (const layer of clickableLayers) {
+      map.on('mouseenter', layer, showPointer);
+      map.on('mouseleave', layer, clearPointer);
+    }
+    ready = true;
+    sync();
+  };
+  if (map.isStyleLoaded() === true) {
+    setUp();
+  } else {
+    map.once('load', setUp);
+  }
 
   return {
     setCameras(next) {
       cameras = next;
-      cameraById.clear();
-      positionById.clear();
-      for (const camera of next) {
-        cameraById.set(camera.id, camera);
-        positionById.set(
-          camera.id,
-          Cartesian3.fromDegrees(camera.lng, camera.lat),
-        );
-      }
-      rebuild();
+      sync();
     },
 
     setVisibleCategories(visible) {
       visibleCategories = visible;
-      rebuild();
+      sync();
     },
 
     setSelected(cameraId) {
@@ -343,25 +285,26 @@ export function createCameraLayer(
         return;
       }
       selectedId = cameraId;
-      rebuild();
+      sync();
     },
 
     flyTo(location) {
-      viewer.camera.flyTo({
-        destination: Cartesian3.fromDegrees(
-          location.lng,
-          location.lat,
-          FLY_TO_HEIGHT_METRES,
-        ),
-        duration: prefersReducedMotion() ? 0 : FLY_DURATION_SECONDS,
+      map.flyTo({
+        center: [location.lng, location.lat],
+        zoom: FLY_TO_ZOOM,
+        duration: prefersReducedMotion() ? 0 : FLY_DURATION_MS,
+        essential: true,
       });
     },
 
     destroy() {
-      clickHandler.destroy();
-      removeMoveEndListener();
-      if (!viewer.isDestroyed()) {
-        viewer.scene.primitives.remove(billboards);
+      map.off('load', setUp);
+      map.off('click', CLUSTER_LAYER, onClusterClick);
+      map.off('click', PIN_LAYER, onPinClick);
+      map.off('click', SELECTED_PIN_LAYER, onPinClick);
+      for (const layer of clickableLayers) {
+        map.off('mouseenter', layer, showPointer);
+        map.off('mouseleave', layer, clearPointer);
       }
     },
   };

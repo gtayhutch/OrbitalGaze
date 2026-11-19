@@ -13,8 +13,11 @@ import {expect, test} from '@playwright/test';
 /** How long the globe may take to finish loading its first tiles, in milliseconds. */
 const GLOBE_READY_TIMEOUT_MS = 30_000;
 
-/** A view looking straight down on Tokyo from 2,000 km. */
-const TOKYO_VIEW = '1_139.7454_35.6586_2000000_0.0_-90.0';
+/** A view looking straight down on Tokyo at regional scale (zoom 5). */
+const TOKYO_VIEW = '2_139.7454_35.6586_5.00_0.0_0.0';
+
+/** The same place in a link from the earlier globe (2,000 km up). */
+const LEGACY_TOKYO_VIEW = '1_139.7454_35.6586_2000000_0.0_-90.0';
 
 /** The browser objects these tests read inside the page. */
 interface BrowserGlobals {
@@ -22,8 +25,8 @@ interface BrowserGlobals {
   navigator: {clipboard: {readText(): Promise<string>}};
 }
 
-/** Reads the camera height (metres) from the page's `view` parameter. */
-function heightInUrl(url: string): number {
+/** Reads the zoom level from the page's `view` parameter. */
+function zoomInUrl(url: string): number {
   const view = new URL(url).searchParams.get('view') ?? '';
   return Number(view.split('_')[3]);
 }
@@ -51,12 +54,26 @@ test('a link with a view opens there, and the address follows the camera', async
   await expect(page.locator('[data-globe-status="ready"]')).toBeVisible({
     timeout: GLOBE_READY_TIMEOUT_MS,
   });
-  expect(heightInUrl(page.url())).toBeCloseTo(2_000_000, -4);
 
   await page.getByRole('button', {name: 'Zoom in'}).click();
 
-  // Zooming in halves the height; the address is rewritten once it settles.
-  await expect.poll(() => heightInUrl(page.url())).toBeLessThan(1_500_000);
+  // Zooming in adds one level; the address is rewritten once it settles.
+  await expect.poll(() => zoomInUrl(page.url())).toBeCloseTo(6, 1);
+  expect(page.url()).toContain('view=2_139.7454_35.6586_');
+});
+
+test('a link from the earlier globe still opens on the same place', async ({
+  page,
+}) => {
+  await page.goto(`/?view=${LEGACY_TOKYO_VIEW}`);
+  await expect(page.locator('[data-globe-status="ready"]')).toBeVisible({
+    timeout: GLOBE_READY_TIMEOUT_MS,
+  });
+
+  // The first settled view is written in the new format: about zoom 5.5.
+  await page.getByRole('button', {name: 'Zoom out'}).click();
+  await expect.poll(() => page.url()).toContain('view=2_139.7454_35.6586_');
+  expect(zoomInUrl(page.url())).toBeCloseTo(4.55, 1);
 });
 
 test('"Share this view" copies a link with the view and the active layers', async ({
@@ -79,5 +96,5 @@ test('"Share this view" copies a link with the view and the active layers', asyn
   );
   const link = new URL(copied);
   expect(link.searchParams.get('layers')).toBe('webcams');
-  expect(link.searchParams.get('view')).toMatch(/^1_139\.\d+_35\.\d+_/);
+  expect(link.searchParams.get('view')).toMatch(/^2_139\.\d+_35\.\d+_/);
 });

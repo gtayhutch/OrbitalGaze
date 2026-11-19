@@ -3,9 +3,10 @@
  *
  * Layer: client feature (browser only).
  *
- * Everything that touches CesiumJS lives in this feature, so the app shell
+ * Everything that touches MapLibre lives in this feature, so the app shell
  * can load it lazily as one bundle. Tests mock this file to replace the WebGL
- * globe, which can't run in a simulated DOM.
+ * globe, which can't run in a simulated DOM. Import only types from here
+ * outside the lazy boundary, or the map library joins the first bundle.
  */
 export type {CameraView} from './camera_view';
 export {
