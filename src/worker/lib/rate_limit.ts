@@ -10,6 +10,9 @@
  *
  * - `search` and `csp-report`: separate budgets of 30 requests per minute,
  *   both backed by SEARCH_RATE_LIMITER with distinct keys.
+ * - `tiles`: basemap tiles (TILES_RATE_LIMITER, 2,400 requests per minute).
+ *   Panning and zooming the globe loads dozens of tiles at a time, which
+ *   would use up the general budget in seconds.
  * - `api`: everything else (API_RATE_LIMITER, 300 requests per minute).
  *
  * The key is the visitor's IP address as reported by Cloudflare in
@@ -27,13 +30,16 @@ import {buildErrorBody} from './errors';
 export const RATE_LIMIT_RETRY_AFTER_SECONDS = 60;
 
 /** Which budget a request counts against. */
-export type RateLimitGroup = 'search' | 'csp-report' | 'api';
+export type RateLimitGroup = 'search' | 'csp-report' | 'tiles' | 'api';
 
 /** Path prefix of the search endpoint, which has its own smaller budget. */
 const SEARCH_PATH_PREFIX = '/api/v1/cameras/search';
 
 /** The browser's endpoint for reporting a policy violation. */
 const CSP_REPORT_PATH = '/api/v1/csp-reports';
+
+/** Path prefix of the basemap (TileJSON and tiles). */
+const BASEMAP_PATH_PREFIX = '/api/v1/basemap/';
 
 /**
  * Picks the budget for a request path.
@@ -44,6 +50,9 @@ const CSP_REPORT_PATH = '/api/v1/csp-reports';
 export function rateLimitGroupFor(path: string): RateLimitGroup {
   if (path === CSP_REPORT_PATH) {
     return 'csp-report';
+  }
+  if (path.startsWith(BASEMAP_PATH_PREFIX)) {
+    return 'tiles';
   }
   return path.startsWith(SEARCH_PATH_PREFIX) ? 'search' : 'api';
 }
@@ -58,7 +67,11 @@ export const rateLimit: MiddlewareHandler<AppContext> = async (c, next) => {
   const group = rateLimitGroupFor(c.req.path);
   const clientAddress = c.req.header('CF-Connecting-IP') ?? 'local';
   const limiter =
-    group === 'api' ? c.env.API_RATE_LIMITER : c.env.SEARCH_RATE_LIMITER;
+    group === 'api'
+      ? c.env.API_RATE_LIMITER
+      : group === 'tiles'
+        ? c.env.TILES_RATE_LIMITER
+        : c.env.SEARCH_RATE_LIMITER;
 
   const {success} = await limiter.limit({key: `${group}:${clientAddress}`});
   if (!success) {

@@ -54,7 +54,23 @@ export interface WorkerConfig {
    * import jobs skip, so tests and CI never call Windy.
    */
   readonly windyApiKey: string | null;
+  /**
+   * The basemap archive's object key in the `BASEMAP` bucket (for example
+   * `planet/20261118.pmtiles`), or `null` when none is set. Not a secret;
+   * it lives in `wrangler.jsonc` vars.
+   */
+  readonly basemapArchive: string | null;
 }
+
+/**
+ * A safe archive key: lowercase path segments ending in `.pmtiles`, with no
+ * `..`, so it can only name an object inside the bucket.
+ */
+const BasemapArchiveSchema = z
+  .string()
+  .regex(/^[a-z0-9][a-z0-9_-]*(?:\/[a-z0-9][a-z0-9_.-]*)*\.pmtiles$/)
+  .max(120)
+  .refine(key => !key.includes('..'), 'Must not contain "..".');
 
 /** Environments that must have every secret set. */
 const HOSTED_ENVIRONMENTS: ReadonlySet<AppEnvironment> = new Set([
@@ -75,6 +91,9 @@ const RawWorkerSettingsSchema = z
       .string()
       .optional()
       .transform(value => (value === undefined || value === '' ? null : value)),
+    BASEMAP_ARCHIVE: BasemapArchiveSchema.optional().transform(
+      value => value ?? null,
+    ),
   })
   .refine(
     settings =>
@@ -106,6 +125,7 @@ export class ConfigError extends Error {
  * const config = parseWorkerConfig(env);
  * config.appEnvironment; // "test", "staging", or "production"
  * config.windyApiKey; // the key, or null when not set locally
+ * config.basemapArchive; // for example "planet/20261118.pmtiles"
  */
 export function parseWorkerConfig(env: unknown): WorkerConfig {
   const result = RawWorkerSettingsSchema.safeParse(env);
@@ -119,5 +139,6 @@ export function parseWorkerConfig(env: unknown): WorkerConfig {
   return {
     appEnvironment: result.data.APP_ENV,
     windyApiKey: result.data.WINDY_API_KEY,
+    basemapArchive: result.data.BASEMAP_ARCHIVE,
   };
 }
