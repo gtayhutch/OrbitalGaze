@@ -12,7 +12,11 @@ describe('parseWorkerConfig', () => {
     for (const environment of ['test', 'staging', 'production'] as const) {
       expect(
         parseWorkerConfig({APP_ENV: environment, WINDY_API_KEY: 'key'}),
-      ).toEqual({appEnvironment: environment, windyApiKey: 'key'});
+      ).toEqual({
+        appEnvironment: environment,
+        windyApiKey: 'key',
+        basemapArchive: null,
+      });
     }
   });
 
@@ -20,7 +24,30 @@ describe('parseWorkerConfig', () => {
     expect(parseWorkerConfig({APP_ENV: 'test', DB: {}, OTHER: 1})).toEqual({
       appEnvironment: 'test',
       windyApiKey: null,
+      basemapArchive: null,
     });
+  });
+
+  it('reads the basemap archive key', () => {
+    expect(
+      parseWorkerConfig({
+        APP_ENV: 'test',
+        BASEMAP_ARCHIVE: 'planet/20261118.pmtiles',
+      }).basemapArchive,
+    ).toBe('planet/20261118.pmtiles');
+  });
+
+  it.each([
+    ['../secrets.pmtiles'],
+    ['planet/../other.pmtiles'],
+    ['/planet/a.pmtiles'],
+    ['planet/Map.pmtiles'],
+    ['planet/map.zip'],
+    [''],
+  ])('rejects the unsafe archive key %j', key => {
+    expect(() =>
+      parseWorkerConfig({APP_ENV: 'test', BASEMAP_ARCHIVE: key}),
+    ).toThrow(/BASEMAP_ARCHIVE/);
   });
 
   it('treats a missing or empty Windy key as not set locally', () => {
