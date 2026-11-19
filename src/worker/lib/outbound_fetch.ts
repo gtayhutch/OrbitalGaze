@@ -58,7 +58,7 @@ export type FetchFunction = (
   init?: RequestInit,
 ) => Promise<Response>;
 
-/** Options for {@link fetchJson}. */
+/** Options for {@link fetchJson} and {@link fetchText}. */
 export interface FetchJsonOptions {
   /** Hostnames this request may go to, for example `api.windy.com`. */
   readonly allowedHosts: readonly string[];
@@ -143,6 +143,65 @@ async function readTextWithLimit(
 }
 
 /**
+ * Sends a checked GET request and returns the successful response.
+ *
+ * Shared by {@link fetchJson} and {@link fetchText}: the URL must pass the
+ * allowlist, redirects are failures, and only a 2xx with an expected
+ * content type gets through. The body is left unread.
+ *
+ * @param url The URL to request, built by the caller from fixed parts.
+ * @param options Allowlist, headers, timeout, and size cap.
+ * @param accept The `Accept` header to send.
+ * @param isExpectedType Whether a response's `Content-Type` is acceptable.
+ * @returns The response, with its body still to be read.
+ * @throws {OutboundError} For every kind of failure; see {@link OutboundFailure}.
+ */
+async function sendCheckedGet(
+  url: URL,
+  options: FetchJsonOptions,
+  accept: string,
+  isExpectedType: (contentType: string) => boolean,
+): Promise<Response> {
+  const host = url.hostname;
+  // Step 1: refuse anything that isn't https to an allowed host.
+  if (!isAllowedUrl(url, options.allowedHosts)) {
+    throw new OutboundError('blocked-url', host);
+  }
+
+  // Step 2: send the request with a timeout and without following redirects.
+  const doFetch = options.fetch ?? fetch;
+  let response: Response;
+  try {
+    response = await doFetch(url.toString(), {
+      method: 'GET',
+      headers: {Accept: accept, ...options.headers},
+      redirect: 'manual',
+      signal: AbortSignal.timeout(options.timeoutMs),
+    });
+  } catch (error) {
+    const timedOut =
+      error instanceof DOMException &&
+      (error.name === 'TimeoutError' || error.name === 'AbortError');
+    throw new OutboundError(timedOut ? 'timeout' : 'network', host);
+  }
+
+  // Step 3: only a 2xx answer of the expected type is accepted.
+  if (response.status >= 300 && response.status < 400) {
+    await response.body?.cancel();
+    throw new OutboundError('redirect', host, response.status);
+  }
+  if (!response.ok) {
+    await response.body?.cancel();
+    throw new OutboundError('http-status', host, response.status);
+  }
+  if (!isExpectedType(response.headers.get('Content-Type') ?? '')) {
+    await response.body?.cancel();
+    throw new OutboundError('invalid-body', host, response.status);
+  }
+  return response;
+}
+
+/**
  * Sends a GET request and returns the parsed JSON body.
  *
  * @param url The URL to request. Built by the caller from fixed parts.
@@ -161,49 +220,52 @@ export async function fetchJson(
   url: URL,
   options: FetchJsonOptions,
 ): Promise<unknown> {
-  const host = url.hostname;
-  // Step 1: refuse anything that isn't https to an allowed host.
-  if (!isAllowedUrl(url, options.allowedHosts)) {
-    throw new OutboundError('blocked-url', host);
-  }
-
-  // Step 2: send the request with a timeout and without following redirects.
-  const doFetch = options.fetch ?? fetch;
-  let response: Response;
-  try {
-    response = await doFetch(url.toString(), {
-      method: 'GET',
-      headers: {Accept: 'application/json', ...options.headers},
-      redirect: 'manual',
-      signal: AbortSignal.timeout(options.timeoutMs),
-    });
-  } catch (error) {
-    const timedOut =
-      error instanceof DOMException &&
-      (error.name === 'TimeoutError' || error.name === 'AbortError');
-    throw new OutboundError(timedOut ? 'timeout' : 'network', host);
-  }
-
-  // Step 3: only a 2xx JSON answer is accepted.
-  if (response.status >= 300 && response.status < 400) {
-    await response.body?.cancel();
-    throw new OutboundError('redirect', host, response.status);
-  }
-  if (!response.ok) {
-    await response.body?.cancel();
-    throw new OutboundError('http-status', host, response.status);
-  }
-  const contentType = response.headers.get('Content-Type') ?? '';
-  if (!/^application\/(?:[\w.+-]+\+)?json\b/i.test(contentType)) {
-    await response.body?.cancel();
-    throw new OutboundError('invalid-body', host, response.status);
-  }
-
+  const response = await sendCheckedGet(
+    url,
+    options,
+    'application/json',
+    contentType => /^application\/(?:[\w.+-]+\+)?json\b/i.test(contentType),
+  );
   // Step 4: read with the size cap, then parse.
-  const text = await readTextWithLimit(response, options.maxBytes, host);
+  const text = await readTextWithLimit(
+    response,
+    options.maxBytes,
+    url.hostname,
+  );
   try {
     return JSON.parse(text) as unknown;
   } catch {
-    throw new OutboundError('invalid-body', host, response.status);
+    throw new OutboundError('invalid-body', url.hostname, response.status);
   }
+}
+
+/**
+ * Sends a GET request and returns the body as text, for feeds published as
+ * CSV or plain text (for example CelesTrak's orbit data, which asks clients
+ * to prefer CSV over JSON).
+ *
+ * @param url The URL to request. Built by the caller from fixed parts.
+ * @param options Allowlist, headers, timeout, and size cap.
+ * @returns The body text, not yet validated: callers parse and check it.
+ * @throws {OutboundError} For every kind of failure; see {@link OutboundFailure}.
+ *     A JSON or HTML answer (an error page) is `invalid-body`.
+ * @example
+ * const csv = await fetchText(new URL('https://celestrak.org/NORAD/elements/gp.php?GROUP=active&FORMAT=csv'), {
+ *   allowedHosts: ['celestrak.org'],
+ *   timeoutMs: 20_000,
+ *   maxBytes: 4_000_000,
+ * });
+ */
+export async function fetchText(
+  url: URL,
+  options: FetchJsonOptions,
+): Promise<string> {
+  const response = await sendCheckedGet(
+    url,
+    options,
+    'text/csv, text/plain',
+    contentType =>
+      /^(?:text\/(?:csv|plain)|application\/csv)\b/i.test(contentType),
+  );
+  return readTextWithLimit(response, options.maxBytes, url.hostname);
 }

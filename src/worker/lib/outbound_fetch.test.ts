@@ -6,7 +6,12 @@
 import {describe, expect, it} from 'vitest';
 
 import {fakeFetch, jsonResponse} from '../test_support/windy_fakes';
-import {fetchJson, isAllowedUrl, OutboundError} from './outbound_fetch';
+import {
+  fetchJson,
+  fetchText,
+  isAllowedUrl,
+  OutboundError,
+} from './outbound_fetch';
 
 /** Options shared by most tests: one allowed host, small limits. */
 const baseOptions = {
@@ -179,5 +184,88 @@ describe('fetchJson', () => {
     );
 
     expect(error.message).not.toContain('super-secret-key');
+  });
+});
+
+describe('fetchText', () => {
+  /** A text response with the given type and status. */
+  function textResponse(
+    body: string,
+    contentType: string,
+    status = 200,
+  ): Response {
+    return new Response(body, {status, headers: {'Content-Type': contentType}});
+  }
+
+  it('returns a CSV body and asks for CSV', async () => {
+    const fake = fakeFetch(() =>
+      textResponse('A,B\n1,2\n', 'text/csv; charset=utf-8'),
+    );
+
+    const text = await fetchText(new URL('https://api.example.com/x.csv'), {
+      ...baseOptions,
+      fetch: fake.fetch,
+    });
+
+    expect(text).toBe('A,B\n1,2\n');
+    expect(fake.requests[0]?.headers.get('Accept')).toContain('text/csv');
+    expect(fake.requests[0]?.redirect).toBe('manual');
+  });
+
+  it('accepts plain text too', async () => {
+    const fake = fakeFetch(() => textResponse('hello', 'text/plain'));
+
+    await expect(
+      fetchText(new URL('https://api.example.com/x'), {
+        ...baseOptions,
+        fetch: fake.fetch,
+      }),
+    ).resolves.toBe('hello');
+  });
+
+  it('refuses an HTML error page or JSON', async () => {
+    for (const type of ['text/html', 'application/json']) {
+      const fake = fakeFetch(() => textResponse('<html></html>', type));
+
+      const error = await failureOf(
+        fetchText(new URL('https://api.example.com/x'), {
+          ...baseOptions,
+          fetch: fake.fetch,
+        }),
+      );
+
+      expect(error.failure).toBe('invalid-body');
+    }
+  });
+
+  it('applies the allowlist, status check and size cap', async () => {
+    const fake = fakeFetch(url =>
+      url.pathname === '/big'
+        ? textResponse('x'.repeat(2_000), 'text/csv')
+        : textResponse('', 'text/csv', 403),
+    );
+    const options = {...baseOptions, fetch: fake.fetch};
+
+    expect(
+      (
+        await failureOf(
+          fetchText(new URL('https://evil.example.com/x'), options),
+        )
+      ).failure,
+    ).toBe('blocked-url');
+    expect(
+      (
+        await failureOf(
+          fetchText(new URL('https://api.example.com/x'), options),
+        )
+      ).failure,
+    ).toBe('http-status');
+    expect(
+      (
+        await failureOf(
+          fetchText(new URL('https://api.example.com/big'), options),
+        )
+      ).failure,
+    ).toBe('too-large');
   });
 });
