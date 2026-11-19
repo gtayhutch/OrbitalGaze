@@ -86,6 +86,13 @@ export interface GlobeViewProps {
   /** Called with a camera's ID when its pin is clicked. */
   onSelectCamera: (cameraId: string) => void;
   /**
+   * Called with the map once it is ready (style loaded, basemap settled),
+   * and with `null` when it goes away. Other features use it to add their
+   * own drawing, such as the satellites overlay, without the globe
+   * importing them.
+   */
+  onMapReady?: (map: MapLibreMap | null) => void;
+  /**
    * True while the detail panel is open: it covers the right side on wide
    * screens (the controls move left) and the bottom on phones (the credits
    * move above it).
@@ -167,6 +174,7 @@ export function GlobeView({
   initialView = null,
   onViewChange,
   onSelectCamera,
+  onMapReady,
   isDetailOpen,
   credits,
   className,
@@ -189,6 +197,10 @@ export function GlobeView({
     onViewChangeRef.current = onViewChange;
   }, [onViewChange]);
   const initialViewRef = useRef(initialView);
+  const onMapReadyRef = useRef(onMapReady);
+  useEffect(() => {
+    onMapReadyRef.current = onMapReady;
+  }, [onMapReady]);
 
   // Stable across renders, so React attaches the globe once per element.
   const attachGlobe = useCallback((container: HTMLDivElement) => {
@@ -242,6 +254,7 @@ export function GlobeView({
       map.once('idle', () => {
         setStatus('ready');
       });
+      onMapReadyRef.current?.(map);
       map.triggerRepaint();
     });
 
@@ -249,6 +262,7 @@ export function GlobeView({
     // context, web workers, and listeners.
     return () => {
       teardown.abort();
+      onMapReadyRef.current?.(null);
       layerRef.current?.destroy();
       earthquakeLayerRef.current?.destroy();
       layerRef.current = null;

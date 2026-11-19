@@ -29,6 +29,9 @@
     "deploy:production": "CLOUDFLARE_ENV=production vite build && wrangler d1 migrations apply DB --remote --env production && wrangler deploy"
   },
   "dependencies": {
+    "@deck.gl/core": "9.4.1",
+    "@deck.gl/layers": "9.4.1",
+    "@deck.gl/maplibre": "9.4.1",
     "@photostructure/tz-lookup": "^11.8.0",
     "@protomaps/basemaps": "5.7.2",
     "@sentry/browser": "11.13.0",
@@ -43,6 +46,7 @@
     "radix-ui": "^1.8.1",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
+    "satellite.js": "7.1.0",
     "tailwind-merge": "^3.7.0",
     "zod": "^4.6.7"
   },

@@ -7,6 +7,8 @@ export {
   SearchDialog,
   SearchTrigger,
   useSearchShortcut,
+  type ExtraSearchGroup,
+  type ExtraSearchResult,
   type SearchDialogProps,
   type SearchTriggerProps,
 } from './search_dialog';
