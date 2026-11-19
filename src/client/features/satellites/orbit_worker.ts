@@ -34,11 +34,14 @@ import {
 
 import {layerSnapshotSchema} from '@/shared/layers';
 import {
+  SATELLITE_LAYER_ID,
+  SatelliteGroupSchema,
   SatelliteSchema,
   type Satellite,
   type SatelliteGroup,
 } from '@/shared/satellites';
 import {dataEnvelope} from '@/shared/api/envelope';
+import {z} from 'zod';
 
 import type {
   OrbitRequest,
@@ -50,6 +53,30 @@ import type {
 const SnapshotEnvelopeSchema = dataEnvelope(
   layerSnapshotSchema(SatelliteSchema),
 );
+
+/**
+ * Where the snapshot is: our own API, on the worker's own origin. The worker
+ * never fetches an address it is sent.
+ */
+const SNAPSHOT_PATH = `/api/v1/layers/${SATELLITE_LAYER_ID}`;
+
+/**
+ * Every request the page may send. A dedicated worker only hears from the
+ * page that started it (such messages carry no origin to check), but each
+ * one is still validated before use.
+ */
+const OrbitRequestSchema = z.discriminatedUnion('type', [
+  z.object({type: z.literal('load')}),
+  z.object({type: z.literal('tick'), time: z.number().int().nonnegative()}),
+  z.object({
+    type: z.literal('groups'),
+    groups: z.array(SatelliteGroupSchema).max(20),
+  }),
+  z.object({
+    type: z.literal('select'),
+    id: z.number().int().min(1).max(999_999_999).nullable(),
+  }),
+]) satisfies z.ZodType<OrbitRequest>;
 
 /** Points along one drawn orbit. */
 const PATH_POINTS = 180;
@@ -111,7 +138,8 @@ function locate(
 }
 
 /** Step 1 and 2: download, validate, and build the orbit models. */
-async function load(url: string): Promise<void> {
+async function load(): Promise<void> {
+  const url = new URL(SNAPSHOT_PATH, self.location.origin);
   const response = await fetch(url, {headers: {Accept: 'application/json'}});
   if (!response.ok) {
     send({type: 'load-failed', notFound: response.status === 404});
@@ -228,11 +256,15 @@ function sendPath(index: number): void {
   send({type: 'path', id: satellite.id, path}, [path.buffer]);
 }
 
-self.onmessage = (event: MessageEvent<OrbitRequest>) => {
-  const request = event.data;
+self.onmessage = (event: MessageEvent<unknown>) => {
+  const parsed = OrbitRequestSchema.safeParse(event.data);
+  if (!parsed.success) {
+    return;
+  }
+  const request = parsed.data;
   switch (request.type) {
     case 'load':
-      void load(request.url).catch((error: unknown) => {
+      void load().catch((error: unknown) => {
         console.error('Could not load the satellites.', error);
         send({type: 'load-failed', notFound: false});
       });

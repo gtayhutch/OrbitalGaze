@@ -22,12 +22,7 @@ import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 
 import {reportBrowserError} from '@/client/lib/error_reporting';
 import {prefersReducedMotion} from '@/client/lib/motion';
-import {layerSnapshotPath} from '@/client/lib/use_layer_snapshot';
-import {
-  SATELLITE_GROUPS,
-  SATELLITE_LAYER_ID,
-  type SatelliteGroup,
-} from '@/shared/satellites';
+import {SATELLITE_GROUPS, type SatelliteGroup} from '@/shared/satellites';
 
 import type {
   OrbitCatalog,
@@ -299,10 +294,9 @@ export function useSatellites({
       }
     };
 
-    const url = `${window.location.origin}${layerSnapshotPath(SATELLITE_LAYER_ID)}`;
-    worker.postMessage({type: 'load', url} satisfies OrbitRequest);
+    worker.postMessage({type: 'load'} satisfies OrbitRequest);
     const reloadTimer = window.setInterval(() => {
-      worker.postMessage({type: 'load', url} satisfies OrbitRequest);
+      worker.postMessage({type: 'load'} satisfies OrbitRequest);
     }, RELOAD_MS);
 
     return () => {

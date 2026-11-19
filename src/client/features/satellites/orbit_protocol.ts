@@ -9,8 +9,11 @@ import type {SatelliteGroup} from '@/shared/satellites';
 
 /** What the page asks the worker to do. */
 export type OrbitRequest =
-  /** Download and validate the snapshot, then build the orbit models. */
-  | {readonly type: 'load'; readonly url: string}
+  /**
+   * Download and validate the snapshot, then build the orbit models. The
+   * worker builds the snapshot's address itself, on its own origin.
+   */
+  | {readonly type: 'load'}
   /** Compute every position for this moment (ms since 1970). */
   | {readonly type: 'tick'; readonly time: number}
   /** Hide satellites outside these groups (they're skipped, not drawn). */
