@@ -48,7 +48,7 @@ test('opens earthquake details and flies to the epicentre with the keyboard', as
     .poll(() => new URL(page.url()).searchParams.get('view'), {
       timeout: 15_000,
     })
-    .toMatch(/^1_-120\.\d+_40\.\d+_/);
+    .toMatch(/^2_-120\.\d+_40\.\d+_/);
 
   const result = await new AxeBuilder({page})
     .include('[aria-label="Layers"]')
