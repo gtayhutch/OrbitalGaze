@@ -17,7 +17,7 @@
  *   rather than returning to the search button.
  */
 import {Search} from 'lucide-react';
-import {useEffect, useRef, useState} from 'react';
+import {useEffect, useMemo, useRef, useState} from 'react';
 
 import {Button} from '@/client/components/ui/button';
 import {
@@ -104,6 +104,28 @@ export function SearchTrigger({
   );
 }
 
+/** One result from another source than camera search (for example satellites). */
+export interface ExtraSearchResult {
+  /** Unique within its group. */
+  readonly key: string;
+  /** Main line. */
+  readonly label: string;
+  /** Second line, for example the group and catalogue number. */
+  readonly detail: string;
+  /** Swatch colour (CSS). */
+  readonly color: string;
+  /** Called when the result is chosen. */
+  readonly onSelect: () => void;
+}
+
+/** A group of extra results, matched in the browser as the visitor types. */
+export interface ExtraSearchGroup {
+  /** Group heading, for example "Satellites". */
+  readonly heading: string;
+  /** Returns the matches for a query (synchronous and fast). */
+  readonly search: (query: string) => readonly ExtraSearchResult[];
+}
+
 /** Props for {@link SearchDialog}. */
 export interface SearchDialogProps {
   /** Whether the dialog is open. */
@@ -112,6 +134,11 @@ export interface SearchDialogProps {
   onOpenChange: (open: boolean) => void;
   /** Called with the chosen camera's ID. */
   onSelectCamera: (cameraId: string) => void;
+  /**
+   * More results shown under the cameras, for example satellites while that
+   * layer is on. Omitted: cameras only.
+   */
+  extra?: ExtraSearchGroup | undefined;
 }
 
 /**
@@ -124,17 +151,29 @@ export function SearchDialog({
   open,
   onOpenChange,
   onSelectCamera,
+  extra,
 }: SearchDialogProps): React.JSX.Element {
   const [query, setQuery] = useState('');
   const search = useCameraSearch(query);
+  const extraResults = useMemo(
+    () => (extra === undefined ? [] : extra.search(query)),
+    [extra, query],
+  );
   // Set when a result was chosen, so closing doesn't move focus back to the
   // search button (the camera panel takes it instead).
   const choseResultRef = useRef(false);
 
   /** Opens the chosen camera and closes the dialog. */
   const choose = (cameraId: string): void => {
+    chooseAction(() => {
+      onSelectCamera(cameraId);
+    });
+  };
+
+  /** Runs a result's action and closes the dialog. */
+  const chooseAction = (action: () => void): void => {
     choseResultRef.current = true;
-    onSelectCamera(cameraId);
+    action();
     onOpenChange(false);
     setQuery('');
   };
@@ -171,7 +210,11 @@ export function SearchDialog({
             maxLength={MAX_SEARCH_QUERY_LENGTH}
           />
           <CommandList className="max-h-[60vh]">
-            <SearchStatus search={search} query={query.trim()} />
+            <SearchStatus
+              search={search}
+              query={query.trim()}
+              hasOtherResults={extraResults.length > 0}
+            />
             {search.status === 'ready' && search.results.length > 0 && (
               <CommandGroup heading="Cameras">
                 {search.results.map(result => {
@@ -207,6 +250,32 @@ export function SearchDialog({
                 })}
               </CommandGroup>
             )}
+            {extra !== undefined && extraResults.length > 0 && (
+              <CommandGroup heading={extra.heading}>
+                {extraResults.map(result => (
+                  <CommandItem
+                    key={result.key}
+                    value={`${extra.heading}-${result.key}`}
+                    onSelect={() => {
+                      chooseAction(result.onSelect);
+                    }}
+                    className="gap-3"
+                  >
+                    <span
+                      className="size-2.5 shrink-0 rounded-full"
+                      style={{backgroundColor: result.color}}
+                      aria-hidden="true"
+                    />
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate">{result.label}</span>
+                      <span className="block truncate text-xs text-muted-foreground">
+                        {result.detail}
+                      </span>
+                    </span>
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            )}
           </CommandList>
         </Command>
       </DialogContent>
@@ -218,9 +287,12 @@ export function SearchDialog({
 function SearchStatus({
   search,
   query,
+  hasOtherResults,
 }: {
   search: ReturnType<typeof useCameraSearch>;
   query: string;
+  /** True when another group already shows results. */
+  hasOtherResults: boolean;
 }): React.JSX.Element | null {
   let message: string | null = null;
   switch (search.status) {
@@ -235,7 +307,9 @@ function SearchStatus({
       break;
     case 'ready':
       message =
-        search.results.length === 0 ? `No cameras match “${query}”.` : null;
+        search.results.length === 0 && !hasOtherResults
+          ? `No cameras match “${query}”.`
+          : null;
       break;
     case 'rate-limited':
       message = 'Too many searches. Wait a minute and try again.';

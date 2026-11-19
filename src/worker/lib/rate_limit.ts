@@ -10,7 +10,8 @@
  *
  * - `search` and `csp-report`: separate budgets of 30 requests per minute,
  *   both backed by SEARCH_RATE_LIMITER with distinct keys.
- * - `tiles`: basemap tiles (TILES_RATE_LIMITER, 2,400 requests per minute).
+ * - `tiles`: basemap and imagery tiles (TILES_RATE_LIMITER, 2,400 requests
+ *   per minute).
  *   Panning and zooming the globe loads dozens of tiles at a time, which
  *   would use up the general budget in seconds.
  * - `api`: everything else (API_RATE_LIMITER, 300 requests per minute).
@@ -41,6 +42,9 @@ const CSP_REPORT_PATH = '/api/v1/csp-reports';
 /** Path prefix of the basemap (TileJSON and tiles). */
 const BASEMAP_PATH_PREFIX = '/api/v1/basemap/';
 
+/** Path prefix of the imagery tiles (the satellite map style). */
+const IMAGERY_PATH_PREFIX = '/api/v1/imagery/';
+
 /**
  * Picks the budget for a request path.
  *
@@ -51,7 +55,10 @@ export function rateLimitGroupFor(path: string): RateLimitGroup {
   if (path === CSP_REPORT_PATH) {
     return 'csp-report';
   }
-  if (path.startsWith(BASEMAP_PATH_PREFIX)) {
+  if (
+    path.startsWith(BASEMAP_PATH_PREFIX) ||
+    path.startsWith(IMAGERY_PATH_PREFIX)
+  ) {
     return 'tiles';
   }
   return path.startsWith(SEARCH_PATH_PREFIX) ? 'search' : 'api';

@@ -32,12 +32,14 @@ import type {CameraCategory, CameraIndexEntry} from '@/shared/cameras';
 import type {Earthquake} from '@/shared/earthquakes';
 
 import {
+  applyMapStyle,
   BASEMAP_SOURCE_ID,
   basemapLayers,
   basemapSourceSpec,
   fetchBasemapSource,
   SPACE_COLOUR,
   type BasemapSource,
+  type GlobeMapStyle,
 } from './basemap_style';
 import {createCameraLayer, type CameraLayer} from './camera_layer';
 import type {CameraView} from './camera_view';
@@ -85,6 +87,15 @@ export interface GlobeViewProps {
   onViewChange?: (view: CameraView) => void;
   /** Called with a camera's ID when its pin is clicked. */
   onSelectCamera: (cameraId: string) => void;
+  /** The dark map (default) or satellite imagery. */
+  mapStyle?: GlobeMapStyle;
+  /**
+   * Called with the map once it is ready (style loaded, basemap settled),
+   * and with `null` when it goes away. Other features use it to add their
+   * own drawing, such as the satellites overlay, without the globe
+   * importing them.
+   */
+  onMapReady?: (map: MapLibreMap | null) => void;
   /**
    * True while the detail panel is open: it covers the right side on wide
    * screens (the controls move left) and the bottom on phones (the credits
@@ -167,6 +178,8 @@ export function GlobeView({
   initialView = null,
   onViewChange,
   onSelectCamera,
+  mapStyle = 'dark',
+  onMapReady,
   isDetailOpen,
   credits,
   className,
@@ -189,6 +202,10 @@ export function GlobeView({
     onViewChangeRef.current = onViewChange;
   }, [onViewChange]);
   const initialViewRef = useRef(initialView);
+  const onMapReadyRef = useRef(onMapReady);
+  useEffect(() => {
+    onMapReadyRef.current = onMapReady;
+  }, [onMapReady]);
 
   // Stable across renders, so React attaches the globe once per element.
   const attachGlobe = useCallback((container: HTMLDivElement) => {
@@ -242,6 +259,7 @@ export function GlobeView({
       map.once('idle', () => {
         setStatus('ready');
       });
+      onMapReadyRef.current?.(map);
       map.triggerRepaint();
     });
 
@@ -249,6 +267,7 @@ export function GlobeView({
     // context, web workers, and listeners.
     return () => {
       teardown.abort();
+      onMapReadyRef.current?.(null);
       layerRef.current?.destroy();
       earthquakeLayerRef.current?.destroy();
       layerRef.current = null;
@@ -277,6 +296,13 @@ export function GlobeView({
       selectedEarthquakeId,
     );
   }, [earthquakes, earthquakeCheckedAt, selectedEarthquakeId]);
+  // The map style, once the map and its basemap are ready.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (map !== null && status === 'ready') {
+      applyMapStyle(map, mapStyle, window.location.origin);
+    }
+  }, [mapStyle, status]);
   // Callers keep `focus` referentially stable until the target changes (see
   // the `GlobeFocus` docs), so this flies once per new target.
   useEffect(() => {
@@ -305,6 +331,20 @@ export function GlobeView({
         )}
       >
         {credits}
+        {mapStyle === 'satellite' && status === 'ready' && (
+          <p className="rounded bg-background/70 px-1.5 py-0.5 backdrop-blur-sm">
+            Imagery:{' '}
+            <a
+              href="https://nasa-gibs.github.io/gibs-api-docs/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline underline-offset-2 hover:text-foreground"
+            >
+              NASA GIBS
+            </a>{' '}
+            (Blue Marble)
+          </p>
+        )}
         {hasBasemap && (
           <p className="rounded bg-background/70 px-1.5 py-0.5 backdrop-blur-sm">
             <a
