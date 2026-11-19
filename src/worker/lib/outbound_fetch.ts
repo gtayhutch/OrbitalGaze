@@ -106,6 +106,25 @@ async function readTextWithLimit(
   maxBytes: number,
   host: string,
 ): Promise<string> {
+  return new TextDecoder().decode(
+    await readBytesWithLimit(response, maxBytes, host),
+  );
+}
+
+/**
+ * Reads a response body as bytes, stopping as soon as it passes `maxBytes`.
+ *
+ * @param response The response to read.
+ * @param maxBytes Largest body accepted.
+ * @param host The host, for the error.
+ * @returns The body bytes.
+ * @throws {OutboundError} `too-large` when the body is over the cap.
+ */
+async function readBytesWithLimit(
+  response: Response,
+  maxBytes: number,
+  host: string,
+): Promise<Uint8Array> {
   // A declared length over the cap fails before anything is read.
   const declaredLength = Number(response.headers.get('Content-Length'));
   if (Number.isFinite(declaredLength) && declaredLength > maxBytes) {
@@ -113,7 +132,7 @@ async function readTextWithLimit(
     throw new OutboundError('too-large', host, response.status);
   }
   if (response.body === null) {
-    return '';
+    return new Uint8Array(0);
   }
   // Count bytes while streaming; the declared length can be missing or wrong.
   // Response bodies are byte streams; the runtime types them loosely.
@@ -139,7 +158,7 @@ async function readTextWithLimit(
     bytes.set(chunk, offset);
     offset += chunk.byteLength;
   }
-  return new TextDecoder().decode(bytes);
+  return bytes;
 }
 
 /**
@@ -268,4 +287,33 @@ export async function fetchText(
       /^(?:text\/(?:csv|plain)|application\/csv)\b/i.test(contentType),
   );
   return readTextWithLimit(response, options.maxBytes, url.hostname);
+}
+
+/**
+ * Sends a GET request and returns the body as bytes, for binary feeds such
+ * as map imagery tiles.
+ *
+ * @param url The URL to request. Built by the caller from fixed parts.
+ * @param options Allowlist, headers, timeout, and size cap.
+ * @param contentType The exact media type expected, for example
+ *     `image/jpeg`; anything else (such as an XML error page) is refused.
+ * @returns The body bytes.
+ * @throws {OutboundError} For every kind of failure; see {@link OutboundFailure}.
+ * @example
+ * const jpeg = await fetchBytes(tileUrl, {allowedHosts: ['gibs.earthdata.nasa.gov'],
+ *   timeoutMs: 10_000, maxBytes: 1_000_000}, 'image/jpeg');
+ */
+export async function fetchBytes(
+  url: URL,
+  options: FetchJsonOptions,
+  contentType: string,
+): Promise<Uint8Array> {
+  const expected = contentType.toLowerCase();
+  const response = await sendCheckedGet(
+    url,
+    options,
+    expected,
+    actual => actual.toLowerCase().split(';')[0]?.trim() === expected,
+  );
+  return readBytesWithLimit(response, options.maxBytes, url.hostname);
 }

@@ -28,6 +28,9 @@
  * choices. A layer that is off draws nothing, and its credit leaves the
  * credit bar.
  *
+ * The map style (dark map or satellite imagery) is chosen at the top of the
+ * layer panel, remembered on the device, and kept in the URL (`?map=`).
+ *
  * The followed satellite lives in the URL too (`?satellite=<NORAD number>`).
  * A link with it switches the satellites layer on. Selecting a satellite
  * closes any camera or earthquake, and the other way round. While the
@@ -51,6 +54,7 @@ import {
 import {EarthquakeControls} from '@/client/features/earthquakes';
 import {CreditBar, LayerPanel, useActiveLayers} from '@/client/features/layers';
 import type {CameraView} from '@/client/features/globe';
+import {MapStyleSwitch, useMapStyle} from '@/client/features/map_style';
 import {
   SatelliteControls,
   SatelliteDetailPanel,
@@ -178,6 +182,7 @@ export function App(): React.JSX.Element {
   }, [linkSatellite, setLayerActive]);
   const showSatellites = activeLayers.active.has(SATELLITE_LAYER_ID);
   const satelliteGroups = useSatelliteGroups();
+  const mapStyle = useMapStyle();
   const [map, setMap] = useState<MapLibreMap | null>(null);
 
   /** Selects a camera and clears the current earthquake and satellite. */
@@ -343,6 +348,7 @@ export function App(): React.JSX.Element {
             initialView={initialView}
             onViewChange={recordView}
             onSelectCamera={selectCamera}
+            mapStyle={mapStyle.style}
             onMapReady={setMap}
             isDetailOpen={
               detail.status !== 'idle' || satellites.followed !== null
@@ -357,6 +363,12 @@ export function App(): React.JSX.Element {
         />
         <LayerPanel
           activeLayers={activeLayers}
+          top={
+            <MapStyleSwitch
+              value={mapStyle.style}
+              onChange={mapStyle.setStyle}
+            />
+          }
           layerControls={{
             webcams: <CameraLayerControls index={index} filter={filter} />,
             [EARTHQUAKE_LAYER_ID]: (

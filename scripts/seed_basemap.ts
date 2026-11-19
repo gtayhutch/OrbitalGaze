@@ -14,10 +14,11 @@
  *
  * Either way the archive lands at the key the local Worker reads
  * (`BASEMAP_ARCHIVE` in `wrangler.jsonc`, `planet/local.pmtiles`) in the
- * local bucket only. Hosted buckets are never touched.
+ * local bucket only, and the local tile cache is cleared so the new archive
+ * shows at once. Hosted buckets are never touched.
  */
 import {execFileSync} from 'node:child_process';
-import {existsSync, mkdirSync, writeFileSync} from 'node:fs';
+import {existsSync, mkdirSync, rmSync, writeFileSync} from 'node:fs';
 import {join, resolve} from 'node:path';
 
 import {buildPmtilesArchive} from '../src/worker/test_support/pmtiles_writer.ts';
@@ -31,6 +32,13 @@ const SYNTHETIC_MAX_ZOOM = 2;
 
 /** Where the synthetic archive is written (inside the git-ignored .wrangler folder). */
 const OUTPUT_DIRECTORY = '.wrangler/seed';
+
+/**
+ * The local Workers cache. Tiles are cached under the archive key, which is
+ * the same for every local archive, so it is cleared after seeding;
+ * otherwise `pnpm dev` keeps serving the previous archive's tiles.
+ */
+const LOCAL_CACHE_DIRECTORY = '.wrangler/state/v3/cache';
 
 /** Wrangler's command-line entry point inside node_modules. */
 const WRANGLER_SCRIPT = 'node_modules/wrangler/bin/wrangler.js';
@@ -158,6 +166,13 @@ function main(): void {
     ],
     {stdio: 'inherit'},
   );
+  try {
+    rmSync(LOCAL_CACHE_DIRECTORY, {recursive: true, force: true});
+  } catch {
+    console.warn(
+      `Could not clear ${LOCAL_CACHE_DIRECTORY}; stop pnpm dev and delete it to see the new tiles.`,
+    );
+  }
   console.log(
     given === undefined
       ? 'Seeded the synthetic basemap (plain land, zoom 0–2).'
