@@ -3,10 +3,13 @@
  *
  * Layer: client feature (browser only).
  *
- * Registry pattern: {@link LAYER_DEFINITIONS} is the one list of layers.
- * The layer panel, the credit bar, and saved preferences all read it, so a new
- * layer appears everywhere once it is added here. The order of the list is
- * the order layers appear within their panel group.
+ * Registry pattern: {@link ALL_LAYER_DEFINITIONS} is the one list of
+ * layers, and {@link LAYER_DEFINITIONS} the released ones. The layer panel,
+ * the credit bar, links, and saved preferences all read the released list,
+ * so a new layer appears everywhere once it is added here, and a layer
+ * marked `released: false` disappears everywhere at once while its code
+ * stays in place. The order of the list is the order layers appear within
+ * their panel group.
  */
 import {EARTHQUAKE_LAYER_ID} from '@/shared/earthquakes';
 import {SATELLITE_LAYER_ID} from '@/shared/satellites';
@@ -24,8 +27,8 @@ const WINDY_HOME_URL = 'https://www.windy.com/';
 /** Windy's page for adding a webcam, which its webcam credit must link to. */
 const WINDY_ADD_WEBCAM_URL = 'https://www.windy.com/webcams/add';
 
-/** Every layer, in panel order. */
-export const LAYER_DEFINITIONS = [
+/** Every layer that has been built, released or not, in panel order. */
+export const ALL_LAYER_DEFINITIONS = [
   {
     id: 'webcams',
     domain: 'cameras',
@@ -65,20 +68,34 @@ export const LAYER_DEFINITIONS = [
       {text: 'CelesTrak', href: 'https://celestrak.org/'},
     ],
     defaultOn: false,
+    // Paused: CelesTrak refuses requests from Cloudflare's network, so the
+    // orbital data can't be fetched yet. Set back to true (and register the
+    // Worker source again) once the data path works.
+    released: false,
   },
 ] as const satisfies readonly LayerDefinition[];
 
-/** The ID of a registered layer. */
-export type LayerId = (typeof LAYER_DEFINITIONS)[number]['id'];
+/** The ID of a built layer (released or not). */
+export type LayerId = (typeof ALL_LAYER_DEFINITIONS)[number]['id'];
 
-/** All registered layer IDs, in panel order. */
+/** The layers visitors can use, in panel order. */
+export const LAYER_DEFINITIONS: readonly (LayerDefinition & {
+  readonly id: LayerId;
+})[] = (
+  ALL_LAYER_DEFINITIONS as readonly (LayerDefinition & {
+    readonly id: LayerId;
+  })[]
+).filter(layer => layer.released !== false);
+
+/** All released layer IDs, in panel order. */
 export const LAYER_IDS: readonly LayerId[] = LAYER_DEFINITIONS.map(
   layer => layer.id,
 );
 
 /**
- * Whether a value is the ID of a registered layer. Used to clean up saved
- * preferences, which may name layers that no longer exist.
+ * Whether a value is the ID of a released layer. Used to clean up saved
+ * preferences and links, which may name layers that no longer exist or
+ * aren't released.
  *
  * @param value Anything, for example a key read from storage.
  * @returns True for a registered layer ID.

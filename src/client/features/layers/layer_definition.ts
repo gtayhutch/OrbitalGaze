@@ -64,4 +64,9 @@ export interface LayerDefinition {
   readonly attribution: readonly AttributionPart[];
   /** Whether the layer is on for visitors who haven't chosen yet. */
   readonly defaultOn: boolean;
+  /**
+   * `false` keeps a built layer out of the app (panel, links, saved
+   * choices, credits) until its data is available. Omitted means released.
+   */
+  readonly released?: boolean;
 }
