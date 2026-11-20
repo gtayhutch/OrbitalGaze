@@ -103,6 +103,11 @@ export function useActiveLayers(
 
   const setLayerActive = useCallback(
     (layerId: LayerId, active: boolean) => {
+      // A built but unreleased layer can't be switched on from anywhere
+      // (for example a link that names it).
+      if (!isLayerId(layerId)) {
+        return;
+      }
       // In both branches, nothing changes when the layer is already in that
       // state, so the active set keeps its identity and nothing redraws.
       if (isLinkVisit) {
