@@ -4,8 +4,10 @@ OrbitalGaze ([orbitalgaze.com](https://orbitalgaze.com)) is an interactive 3D
 globe for exploring the world through public webcams. Spin the Earth, zoom in
 anywhere, and watch scenic, weather, traffic, and wildlife cameras that their
 operators publish for public viewing. Turn on the earthquake layer to explore
-USGS events from the past 24 hours. Satellite, flight-path, and weather layers
-are planned.
+USGS events from the past 24 hours, or the satellites layer to watch every
+active satellite move at its real height, from the space stations to the
+geostationary ring. Switch between a dark map and NASA satellite imagery.
+Flight-path and weather layers are planned.
 
 ## Running it locally
 
@@ -30,18 +32,19 @@ compiler API through Microsoft's compatibility package.
 | API and edge logic  | Hono on Cloudflare Workers                           |
 | Data                | Cloudflare D1 (SQLite) and R2                        |
 | Map                 | Protomaps vector tiles, served from R2               |
+| Satellites          | deck.gl, satellite.js (SGP4) in a Web Worker         |
 | Background jobs     | Cloudflare Cron Triggers and Queues                  |
 | Tests               | Vitest, Playwright                                   |
 
 Source layout:
 
-| Path          | Contents                                                           |
-| ------------- | ------------------------------------------------------------------ |
-| `src/client/` | Globe, webcam player and search, earthquake layer, and share links |
-| `src/worker/` | API routes, camera ingestion, and earthquake snapshot jobs         |
-| `src/shared/` | Types, validation schemas, and pure helpers used by both sides     |
-| `migrations/` | Database schema migrations                                         |
-| `tests/`      | End-to-end tests                                                   |
+| Path          | Contents                                                                                      |
+| ------------- | --------------------------------------------------------------------------------------------- |
+| `src/client/` | Globe, webcam player and search, earthquake and satellite layers, map styles, and share links |
+| `src/worker/` | API routes, camera ingestion, layer snapshot jobs, and map and imagery tiles                  |
+| `src/shared/` | Types, validation schemas, and pure helpers used by both sides                                |
+| `migrations/` | Database schema migrations                                                                    |
+| `tests/`      | End-to-end tests                                                                              |
 
 Every source file begins with a comment explaining its role, and every
 function and component is documented where it's defined.
@@ -54,6 +57,14 @@ function and component is documented where it's defined.
 - The [USGS Earthquake Hazards Program](https://earthquake.usgs.gov/) provides
   earthquake data. The layer shows magnitude, depth, local event time, and
   attribution.
+- [CelesTrak](https://celestrak.org/) provides the orbital elements of
+  active satellites, downloaded a few times a day. Positions are computed in
+  your browser with the SGP4 model ([satellite.js](https://github.com/shashwatak/satellite-js)).
+  Military satellites are left out.
+- The satellite map style shows NASA's Blue Marble imagery from the
+  [Global Imagery Browse Services (GIBS)](https://nasa-gibs.github.io/gibs-api-docs/),
+  part of NASA's Earth Science Data and Information System (ESDIS), served
+  through our own cache.
 - The map uses [OpenStreetMap](https://www.openstreetmap.org/copyright) data
   (© OpenStreetMap contributors, ODbL) from a [Protomaps](https://protomaps.com)
   planet build, served from our own storage. Label fonts are Noto Sans (SIL
