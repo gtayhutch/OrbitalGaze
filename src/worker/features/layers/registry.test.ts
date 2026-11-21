@@ -12,7 +12,8 @@ import {describe, expect, it} from 'vitest';
 import {LayerIdSchema} from '@/shared/layers';
 
 import {SNAPSHOT_SOURCES} from './registry';
-import {isValidRefreshMinutes} from './snapshot_source';
+import {buildWorkerConfig} from '../../test_support/factories';
+import {isValidRefreshMinutes, isValidRefreshOffset} from './snapshot_source';
 
 describe('SNAPSHOT_SOURCES', () => {
   it('uses unique, well-formed layer IDs', () => {
@@ -27,6 +28,18 @@ describe('SNAPSHOT_SOURCES', () => {
   it('uses refresh intervals the 5-minute cron can keep', () => {
     for (const source of SNAPSHOT_SOURCES) {
       expect(isValidRefreshMinutes(source.refreshMinutes)).toBe(true);
+    }
+  });
+
+  it('uses offsets that fit the 5-minute cron and the interval', () => {
+    for (const offset of [0, 25, 205, 355]) {
+      const config = buildWorkerConfig({satelliteRefreshOffsetMinutes: offset});
+      for (const source of SNAPSHOT_SOURCES) {
+        const sourceOffset = source.refreshOffsetMinutes?.(config) ?? 0;
+        expect(isValidRefreshOffset(sourceOffset, source.refreshMinutes)).toBe(
+          true,
+        );
+      }
     }
   });
 

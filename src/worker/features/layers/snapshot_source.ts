@@ -19,6 +19,7 @@
  */
 import type {LayerId} from '@/shared/layers';
 
+import type {WorkerConfig} from '../../lib/config';
 import type {FetchFunction} from '../../lib/outbound_fetch';
 
 /**
@@ -40,6 +41,23 @@ export interface SnapshotFetchContext {
   readonly fetch: FetchFunction;
   /** When the refresh was scheduled; use it instead of reading the clock. */
   readonly now: Date;
+  /**
+   * The Worker's validated settings, for sources that need credentials
+   * (never log them).
+   */
+  readonly config: WorkerConfig;
+}
+
+/**
+ * Thrown by a source whose credentials aren't set. The refresh logs it as
+ * `not-configured` and sends no request.
+ */
+export class SourceNotConfiguredError extends Error {
+  /** @param layerId The layer whose source isn't configured. */
+  constructor(layerId: string) {
+    super(`The ${layerId} source isn't configured.`);
+    this.name = 'SourceNotConfiguredError';
+  }
 }
 
 /**
@@ -80,6 +98,17 @@ export interface SnapshotSource<Item = unknown> {
    * @throws {Error} When the feed is unreachable or its data is invalid.
    */
   fetchItems(context: SnapshotFetchContext): Promise<readonly Item[]>;
+  /**
+   * Minutes past midnight UTC of the first refresh of the day; then every
+   * {@link refreshMinutes}. Omitted means 0. Must be a multiple of
+   * {@link REFRESH_STEP_MINUTES} below `refreshMinutes`. It may depend on
+   * the environment (for example, two environments sharing one upstream
+   * account refresh in different hours).
+   *
+   * @param config The Worker's settings.
+   * @returns The offset in minutes.
+   */
+  refreshOffsetMinutes?(config: WorkerConfig): number;
 }
 
 /**
@@ -91,6 +120,36 @@ export interface SnapshotSource<Item = unknown> {
  * @example
  * isValidRefreshMinutes(15); // true
  * isValidRefreshMinutes(35); // false: 1,440 isn't a multiple of 35
+ */
+/**
+ * Checks a refresh offset against its interval and the 5-minute cron.
+ *
+ * @param offsetMinutes The proposed offset.
+ * @param refreshMinutes The source's interval.
+ * @returns True for a multiple of {@link REFRESH_STEP_MINUTES} from 0 to
+ *     below the interval.
+ * @example
+ * isValidRefreshOffset(25, 360); // true
+ * isValidRefreshOffset(27, 360); // false: the cron runs every 5 minutes
+ */
+export function isValidRefreshOffset(
+  offsetMinutes: number,
+  refreshMinutes: number,
+): boolean {
+  return (
+    Number.isInteger(offsetMinutes) &&
+    offsetMinutes >= 0 &&
+    offsetMinutes < refreshMinutes &&
+    offsetMinutes % REFRESH_STEP_MINUTES === 0
+  );
+}
+
+/**
+ * Checks that a refresh interval fits the 5-minute cron and the UTC day.
+ *
+ * @param minutes The proposed interval.
+ * @returns True for a positive whole multiple of {@link REFRESH_STEP_MINUTES}
+ *     that divides 1,440 (the minutes in a day).
  */
 export function isValidRefreshMinutes(minutes: number): boolean {
   return (

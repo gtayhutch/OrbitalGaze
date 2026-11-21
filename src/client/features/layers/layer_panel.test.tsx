@@ -45,7 +45,7 @@ describe('LayerPanel', () => {
     render(<PanelWithLayers />);
 
     expect(screen.getByRole('button', {name: /^Layers/})).toHaveTextContent(
-      'Layers1 of 2 on',
+      'Layers1 of 3 on',
     );
   });
 
@@ -63,7 +63,7 @@ describe('LayerPanel', () => {
       screen.queryByText('Webcam category filters'),
     ).not.toBeInTheDocument();
     expect(screen.getByRole('button', {name: /^Layers/})).toHaveTextContent(
-      '0 of 2 on',
+      '0 of 3 on',
     );
     expect(window.localStorage.getItem(LAYER_CHOICES_STORAGE_KEY)).toBe(
       '{"webcams":false}',

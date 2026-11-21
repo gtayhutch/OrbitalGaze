@@ -4,8 +4,8 @@ OrbitalGaze ([orbitalgaze.com](https://orbitalgaze.com)) is an interactive 3D
 globe for exploring the world through public webcams. Spin the Earth, zoom in
 anywhere, and watch scenic, weather, traffic, and wildlife cameras that their
 operators publish for public viewing. Turn on the earthquake layer to explore
-USGS events from the past 24 hours, or the satellites layer to watch every
-active satellite move at its real height, from the space stations to the
+USGS events from the past 24 hours, or the satellites layer to watch the
+satellites in orbit move at their real height, from the space stations to the
 geostationary ring. Switch between a dark map and NASA satellite imagery.
 Flight-path and weather layers are planned.
 
@@ -57,10 +57,10 @@ function and component is documented where it's defined.
 - The [USGS Earthquake Hazards Program](https://earthquake.usgs.gov/) provides
   earthquake data. The layer shows magnitude, depth, local event time, and
   attribution.
-- [CelesTrak](https://celestrak.org/) provides the orbital elements of
-  active satellites, downloaded a few times a day. Positions are computed in
-  your browser with the SGP4 model ([satellite.js](https://github.com/shashwatak/satellite-js)).
-  Military satellites are left out.
+- [Space-Track.org](https://www.space-track.org/), the US Space Force's
+  public satellite catalogue, provides the orbital elements of satellites in
+  orbit, downloaded a few times a day. Positions are computed in your
+  browser with the SGP4 model ([satellite.js](https://github.com/shashwatak/satellite-js)).
 - The satellite map style shows NASA's Blue Marble imagery from the
   [Global Imagery Browse Services (GIBS)](https://nasa-gibs.github.io/gibs-api-docs/),
   part of NASA's Earth Science Data and Information System (ESDIS), served

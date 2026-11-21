@@ -16,6 +16,8 @@ describe('parseWorkerConfig', () => {
         appEnvironment: environment,
         windyApiKey: 'key',
         basemapArchive: null,
+        spaceTrack: null,
+        satelliteRefreshOffsetMinutes: 25,
       });
     }
   });
@@ -25,6 +27,8 @@ describe('parseWorkerConfig', () => {
       appEnvironment: 'test',
       windyApiKey: null,
       basemapArchive: null,
+      spaceTrack: null,
+      satelliteRefreshOffsetMinutes: 25,
     });
   });
 
@@ -80,4 +84,67 @@ describe('parseWorkerConfig', () => {
       /secret-value/,
     );
   });
+
+  it('reads the Space-Track login when both parts are set', () => {
+    const config = parseWorkerConfig({
+      APP_ENV: 'test',
+      SPACETRACK_IDENTITY: 'me@example.test',
+      SPACETRACK_PASSWORD: 'pw',
+    });
+
+    expect(config.spaceTrack).toEqual({
+      identity: 'me@example.test',
+      password: 'pw',
+    });
+  });
+
+  it('treats empty Space-Track values as not set', () => {
+    expect(
+      parseWorkerConfig({
+        APP_ENV: 'staging',
+        WINDY_API_KEY: 'key',
+        SPACETRACK_IDENTITY: '',
+        SPACETRACK_PASSWORD: '',
+      }).spaceTrack,
+    ).toBeNull();
+  });
+
+  it('refuses half a Space-Track login, naming the setting only', () => {
+    expect(() =>
+      parseWorkerConfig({
+        APP_ENV: 'test',
+        SPACETRACK_IDENTITY: 'me@example.test',
+      }),
+    ).toThrow(/SPACETRACK_PASSWORD/);
+    expect(() =>
+      parseWorkerConfig({
+        APP_ENV: 'test',
+        SPACETRACK_IDENTITY: 'me@example.test',
+      }),
+    ).not.toThrow(/me@example\.test/);
+  });
+
+  it('reads the satellites offset, defaulting to 25 minutes', () => {
+    expect(
+      parseWorkerConfig({
+        APP_ENV: 'test',
+        SATELLITE_REFRESH_OFFSET_MINUTES: '205',
+      }).satelliteRefreshOffsetMinutes,
+    ).toBe(205);
+    expect(
+      parseWorkerConfig({APP_ENV: 'test'}).satelliteRefreshOffsetMinutes,
+    ).toBe(25);
+  });
+
+  it.each(['27', '360', '-5', 'soon'])(
+    'refuses the satellites offset %s',
+    value => {
+      expect(() =>
+        parseWorkerConfig({
+          APP_ENV: 'test',
+          SATELLITE_REFRESH_OFFSET_MINUTES: value,
+        }),
+      ).toThrow(/SATELLITE_REFRESH_OFFSET_MINUTES/);
+    },
+  );
 });

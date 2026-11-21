@@ -4,7 +4,7 @@
  * Layer: shared (imported by the Worker, which builds the snapshot, and the
  * browser, which reads it). Pure schemas and constants only.
  *
- * Each item carries a satellite's mean orbital elements in CelesTrak's OMM
+ * Each item carries a satellite's mean orbital elements in OMM
  * (Orbit Mean-Elements Message) terms, trimmed to what the SGP4 orbit model
  * needs, plus a neutral display group. Positions are not stored: the browser
  * computes them from these elements for the current moment, every second.
@@ -15,9 +15,9 @@ import {z} from 'zod';
 export const SATELLITE_LAYER_ID = 'satellites';
 
 /**
- * Minutes between refreshes: four times a day. CelesTrak updates its data
- * every two hours and allows one download per update, so this stays well
- * inside its usage policy even after a failed attempt.
+ * Minutes between refreshes: four times a day. Space-Track allows at most
+ * one full catalogue download per hour per account; staging and production
+ * share one account and refresh in different hours (see the source).
  */
 export const SATELLITE_REFRESH_MINUTES = 360;
 
@@ -43,7 +43,7 @@ export const SatelliteGroupSchema = z.enum(SATELLITE_GROUPS);
 export type SatelliteGroup = z.infer<typeof SatelliteGroupSchema>;
 
 /**
- * An OMM epoch as CelesTrak writes it: UTC without a zone suffix and with
+ * An OMM epoch as Space-Track writes it: UTC without a zone suffix and with
  * up to six decimals, for example `2026-11-19T08:15:05.947776`.
  */
 const OMM_EPOCH_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?$/;

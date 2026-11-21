@@ -8,11 +8,6 @@
  * orbit worker fetches it like the real one, so this covers the worker,
  * the deck.gl overlay loading on demand, search, the detail panel, links,
  * the Content Security Policy, and accessibility.
- *
- * The layer is paused (`released: false` in the layer registry) because
- * CelesTrak refuses requests from Cloudflare's network, so the tests of the
- * working layer are skipped until it is released again; the last test
- * checks that the paused layer stays out of the app.
  */
 import AxeBuilder from '@axe-core/playwright';
 import {expect, test, type Page} from '@playwright/test';
@@ -105,7 +100,7 @@ async function stubSnapshot(page: Page): Promise<void> {
     );
 }
 
-test.skip('the satellites layer loads, and search opens a satellite', async ({
+test('the satellites layer loads, and search opens a satellite', async ({
   page,
 }) => {
   await stubSnapshot(page);
@@ -126,7 +121,7 @@ test.skip('the satellites layer loads, and search opens a satellite', async ({
   // Step 1: switch the layer on; its count and credit appear.
   await page.getByRole('switch', {name: 'Satellites'}).click();
   await expect(page.getByText('3 shown')).toBeVisible();
-  await expect(page.getByRole('link', {name: 'CelesTrak'})).toBeVisible();
+  await expect(page.getByRole('link', {name: 'Space-Track.org'})).toBeVisible();
 
   // Step 2: search finds the ISS and opens its live details.
   await page.getByRole('button', {name: /Search places and cameras/}).click();
@@ -153,7 +148,7 @@ test.skip('the satellites layer loads, and search opens a satellite', async ({
   expect(new URL(page.url()).searchParams.get('satellite')).toBeNull();
 });
 
-test.skip('a link to a satellite switches the layer on and opens it', async ({
+test('a link to a satellite switches the layer on and opens it', async ({
   page,
 }) => {
   await stubSnapshot(page);
@@ -165,7 +160,7 @@ test.skip('a link to a satellite switches the layer on and opens it', async ({
   await expect(page.getByRole('switch', {name: 'Satellites'})).toBeChecked();
 });
 
-test.skip('the satellite panels have no detectable accessibility violations', async ({
+test('the satellite panels have no detectable accessibility violations', async ({
   page,
 }) => {
   await stubSnapshot(page);
@@ -180,20 +175,4 @@ test.skip('the satellite panels have no detectable accessibility violations', as
     .analyze();
 
   expect(results.violations).toEqual([]);
-});
-
-test('the paused satellites layer is not offered, and links to it do nothing', async ({
-  page,
-}) => {
-  await stubSnapshot(page);
-  await page.goto('/?layers=satellites&satellite=25544');
-  await expect(page.locator('[data-globe-status="ready"]')).toBeVisible({
-    timeout: GLOBE_READY_TIMEOUT_MS,
-  });
-
-  await expect(page.getByRole('switch', {name: 'Satellites'})).toHaveCount(0);
-  await expect(
-    page.getByRole('complementary', {name: 'ISS (ZARYA)'}),
-  ).toHaveCount(0);
-  await expect(page.getByRole('link', {name: 'CelesTrak'})).toHaveCount(0);
 });

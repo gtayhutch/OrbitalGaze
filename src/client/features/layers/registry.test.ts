@@ -81,21 +81,20 @@ describe('groupLayersByDomain', () => {
   });
 });
 
-describe('unreleased layers', () => {
-  it('keeps a built but unreleased layer out of the app', () => {
-    const satellites = ALL_LAYER_DEFINITIONS.find(
-      layer => layer.id === 'satellites',
-    );
+describe('released layers', () => {
+  it('lists only layers not marked released: false', () => {
+    const released = ALL_LAYER_DEFINITIONS.filter(
+      layer => (layer as {released?: boolean}).released !== false,
+    ).map(layer => layer.id);
 
-    // Built and registered, but paused until its data can be fetched.
-    expect(satellites).toBeDefined();
-    expect(LAYER_DEFINITIONS.map(layer => layer.id)).not.toContain(
-      'satellites',
-    );
-    expect(LAYER_IDS).not.toContain('satellites');
-    expect(isLayerId('satellites')).toBe(false);
-    expect(groupLayersByDomain().some(group => group.domain === 'space')).toBe(
-      false,
-    );
+    expect(LAYER_DEFINITIONS.map(layer => layer.id)).toEqual(released);
+    expect(LAYER_IDS).toEqual(released);
+  });
+
+  it('offers the satellites layer in the Space group', () => {
+    expect(isLayerId('satellites')).toBe(true);
+    expect(
+      groupLayersByDomain().find(group => group.domain === 'space')?.layers,
+    ).toEqual([expect.objectContaining({id: 'satellites'})]);
   });
 });

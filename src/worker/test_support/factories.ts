@@ -1,5 +1,5 @@
 /**
- * @fileoverview Test data factories for sources and cameras.
+ * @fileoverview Test data factories for sources, cameras and Worker settings.
  *
  * Layer: worker test support (runs inside workerd during `pnpm test` only).
  *
@@ -9,6 +9,11 @@
  * search table) as the app.
  */
 import {env} from 'cloudflare:workers';
+
+import {
+  DEFAULT_SATELLITE_REFRESH_OFFSET_MINUTES,
+  type WorkerConfig,
+} from '../lib/config';
 
 import {
   createCameraRepository,
@@ -93,4 +98,24 @@ export async function seedCameras(
   );
   await repository.insertCameras(cameras);
   return {source, cameras};
+}
+
+/**
+ * Builds a Worker configuration for tests: the local test environment, no
+ * Windy key, no Space-Track login, and the default satellites offset.
+ *
+ * @param overrides Settings to change from the defaults.
+ * @returns A valid configuration.
+ */
+export function buildWorkerConfig(
+  overrides: Partial<WorkerConfig> = {},
+): WorkerConfig {
+  return {
+    appEnvironment: 'test',
+    windyApiKey: null,
+    basemapArchive: null,
+    spaceTrack: null,
+    satelliteRefreshOffsetMinutes: DEFAULT_SATELLITE_REFRESH_OFFSET_MINUTES,
+    ...overrides,
+  };
 }
