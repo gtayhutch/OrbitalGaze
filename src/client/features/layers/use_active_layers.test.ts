@@ -79,3 +79,22 @@ describe('useActiveLayers with layers from a share link', () => {
     expect(window.localStorage.getItem(LAYER_CHOICES_STORAGE_KEY)).toBeNull();
   });
 });
+
+describe('useActiveLayers with an unreleased layer', () => {
+  it('never switches it on, on a link visit or from saved choices', () => {
+    const linkVisit = renderHook(() =>
+      useActiveLayers(new Set<'webcams'>(['webcams'])),
+    );
+    act(() => {
+      linkVisit.result.current.setLayerActive('satellites', true);
+    });
+    expect(linkVisit.result.current.active.has('satellites')).toBe(false);
+
+    const normalVisit = renderHook(() => useActiveLayers());
+    act(() => {
+      normalVisit.result.current.setLayerActive('satellites', true);
+    });
+    expect(normalVisit.result.current.active.has('satellites')).toBe(false);
+    expect(window.localStorage.getItem(LAYER_CHOICES_STORAGE_KEY)).toBeNull();
+  });
+});

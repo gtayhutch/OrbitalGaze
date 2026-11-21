@@ -18,5 +18,13 @@ import {USGS_EARTHQUAKES} from './sources/usgs_earthquakes';
  */
 export const SNAPSHOT_SOURCES: readonly SnapshotSource[] = [
   USGS_EARTHQUAKES,
+  // CELESTRAK_SATELLITES is paused: CelesTrak refuses requests from
+  // Cloudflare's network (HTTP 522, then 403), so registering it would only
+  // send failing requests four times a day. Its code and tests stay; add it
+  // back once the data path works, together with the client layer.
+];
+
+/** Built but not refreshed (see the note in {@link SNAPSHOT_SOURCES}). */
+export const PAUSED_SNAPSHOT_SOURCES: readonly SnapshotSource[] = [
   CELESTRAK_SATELLITES,
 ];

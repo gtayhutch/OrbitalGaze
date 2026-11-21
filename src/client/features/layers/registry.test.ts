@@ -10,6 +10,7 @@ import {describe, expect, it} from 'vitest';
 
 import type {LayerDefinition} from './layer_definition';
 import {
+  ALL_LAYER_DEFINITIONS,
   groupLayersByDomain,
   isLayerId,
   LAYER_DEFINITIONS,
@@ -77,5 +78,24 @@ describe('groupLayersByDomain', () => {
       'quakes',
       'events',
     ]);
+  });
+});
+
+describe('unreleased layers', () => {
+  it('keeps a built but unreleased layer out of the app', () => {
+    const satellites = ALL_LAYER_DEFINITIONS.find(
+      layer => layer.id === 'satellites',
+    );
+
+    // Built and registered, but paused until its data can be fetched.
+    expect(satellites).toBeDefined();
+    expect(LAYER_DEFINITIONS.map(layer => layer.id)).not.toContain(
+      'satellites',
+    );
+    expect(LAYER_IDS).not.toContain('satellites');
+    expect(isLayerId('satellites')).toBe(false);
+    expect(groupLayersByDomain().some(group => group.domain === 'space')).toBe(
+      false,
+    );
   });
 });
