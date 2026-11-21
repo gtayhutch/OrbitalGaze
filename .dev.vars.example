@@ -6,3 +6,10 @@
 # https://api.windy.com/keys. Leave it empty to skip the Windy import jobs;
 # the synthetic seed (`pnpm db:seed`) works without it.
 WINDY_API_KEY=
+
+# Space-Track.org login for the satellites layer (optional locally). Create a
+# free account at https://www.space-track.org and accept its User Agreement.
+# Leave both empty to skip the satellites refresh; tests never need them.
+# Never commit real values: .dev.vars is gitignored.
+SPACETRACK_IDENTITY=
+SPACETRACK_PASSWORD=

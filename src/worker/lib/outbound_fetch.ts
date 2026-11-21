@@ -162,7 +162,7 @@ async function readBytesWithLimit(
 }
 
 /**
- * Sends a checked GET request and returns the successful response.
+ * Sends a checked request (a GET, or a form POST) and returns the successful response.
  *
  * Shared by {@link fetchJson} and {@link fetchText}: the URL must pass the
  * allowlist, redirects are failures, and only a 2xx with an expected
@@ -172,14 +172,16 @@ async function readBytesWithLimit(
  * @param options Allowlist, headers, timeout, and size cap.
  * @param accept The `Accept` header to send.
  * @param isExpectedType Whether a response's `Content-Type` is acceptable.
+ * @param body For a POST, the form to send (URL-encoded); otherwise a GET.
  * @returns The response, with its body still to be read.
  * @throws {OutboundError} For every kind of failure; see {@link OutboundFailure}.
  */
-async function sendCheckedGet(
+async function sendCheckedRequest(
   url: URL,
   options: FetchJsonOptions,
   accept: string,
   isExpectedType: (contentType: string) => boolean,
+  body?: URLSearchParams,
 ): Promise<Response> {
   const host = url.hostname;
   // Step 1: refuse anything that isn't https to an allowed host.
@@ -192,8 +194,15 @@ async function sendCheckedGet(
   let response: Response;
   try {
     response = await doFetch(url.toString(), {
-      method: 'GET',
-      headers: {Accept: accept, ...options.headers},
+      method: body === undefined ? 'GET' : 'POST',
+      headers: {
+        Accept: accept,
+        ...(body === undefined
+          ? {}
+          : {'Content-Type': 'application/x-www-form-urlencoded'}),
+        ...options.headers,
+      },
+      ...(body === undefined ? {} : {body: body.toString()}),
       redirect: 'manual',
       signal: AbortSignal.timeout(options.timeoutMs),
     });
@@ -239,7 +248,7 @@ export async function fetchJson(
   url: URL,
   options: FetchJsonOptions,
 ): Promise<unknown> {
-  const response = await sendCheckedGet(
+  const response = await sendCheckedRequest(
     url,
     options,
     'application/json',
@@ -260,8 +269,7 @@ export async function fetchJson(
 
 /**
  * Sends a GET request and returns the body as text, for feeds published as
- * CSV or plain text (for example CelesTrak's orbit data, which asks clients
- * to prefer CSV over JSON).
+ * CSV or plain text.
  *
  * @param url The URL to request. Built by the caller from fixed parts.
  * @param options Allowlist, headers, timeout, and size cap.
@@ -269,8 +277,8 @@ export async function fetchJson(
  * @throws {OutboundError} For every kind of failure; see {@link OutboundFailure}.
  *     A JSON or HTML answer (an error page) is `invalid-body`.
  * @example
- * const csv = await fetchText(new URL('https://celestrak.org/NORAD/elements/gp.php?GROUP=active&FORMAT=csv'), {
- *   allowedHosts: ['celestrak.org'],
+ * const csv = await fetchText(new URL('https://data.example.org/feed.csv'), {
+ *   allowedHosts: ['data.example.org'],
  *   timeoutMs: 20_000,
  *   maxBytes: 4_000_000,
  * });
@@ -279,7 +287,7 @@ export async function fetchText(
   url: URL,
   options: FetchJsonOptions,
 ): Promise<string> {
-  const response = await sendCheckedGet(
+  const response = await sendCheckedRequest(
     url,
     options,
     'text/csv, text/plain',
@@ -309,11 +317,62 @@ export async function fetchBytes(
   contentType: string,
 ): Promise<Uint8Array> {
   const expected = contentType.toLowerCase();
-  const response = await sendCheckedGet(
+  const response = await sendCheckedRequest(
     url,
     options,
     expected,
     actual => actual.toLowerCase().split(';')[0]?.trim() === expected,
   );
   return readBytesWithLimit(response, options.maxBytes, url.hostname);
+}
+
+/**
+ * Logs in to a service with a form POST and returns its session cookie, for
+ * APIs that authenticate with a cookie (such as Space-Track.org).
+ *
+ * The form (which holds credentials) and the cookie are never logged or
+ * placed in an error message.
+ *
+ * @param url The login URL, built from fixed parts.
+ * @param form The form fields, for example `identity` and `password`.
+ * @param options Allowlist, timeout, and size cap (for the small answer).
+ * @param isRefusal Whether the answer's text means the login was refused,
+ *     for services that answer a failed login with HTTP 200.
+ * @returns A `Cookie` header value with every cookie the service set.
+ * @throws {OutboundError} `http-status` (403) for a refused login or a
+ *     missing cookie; otherwise as for any request.
+ * @example
+ * const cookie = await postFormForCookie(loginUrl, form, options, text => text.includes('Failed'));
+ */
+export async function postFormForCookie(
+  url: URL,
+  form: URLSearchParams,
+  options: FetchJsonOptions,
+  isRefusal: (text: string) => boolean,
+): Promise<string> {
+  const response = await sendCheckedRequest(
+    url,
+    options,
+    'application/json, text/plain, */*',
+    () => true,
+    form,
+  );
+  // Read the (small) answer first: a refusal can come with HTTP 200.
+  const text = await readTextWithLimit(
+    response,
+    options.maxBytes,
+    url.hostname,
+  );
+  if (isRefusal(text)) {
+    throw new OutboundError('http-status', url.hostname, 403);
+  }
+  // Keep only "name=value" from each Set-Cookie header.
+  const cookies = response.headers
+    .getSetCookie()
+    .map(header => header.split(';')[0]?.trim() ?? '')
+    .filter(pair => pair.includes('='));
+  if (cookies.length === 0) {
+    throw new OutboundError('http-status', url.hostname, 403);
+  }
+  return cookies.join('; ');
 }

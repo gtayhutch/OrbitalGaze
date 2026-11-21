@@ -62,16 +62,12 @@ export const ALL_LAYER_DEFINITIONS = [
     domain: 'space',
     label: 'Satellites',
     summary:
-      'Active satellites at their real height, moving live. Military satellites are not shown.',
+      "Satellites in orbit at their real height, moving live, from the US Space Force's public catalogue.",
     attribution: [
       {text: 'Orbital data: '},
-      {text: 'CelesTrak', href: 'https://celestrak.org/'},
+      {text: 'Space-Track.org', href: 'https://www.space-track.org/'},
     ],
     defaultOn: false,
-    // Paused: CelesTrak refuses requests from Cloudflare's network, so the
-    // orbital data can't be fetched yet. Set back to true (and register the
-    // Worker source again) once the data path works.
-    released: false,
   },
 ] as const satisfies readonly LayerDefinition[];
 

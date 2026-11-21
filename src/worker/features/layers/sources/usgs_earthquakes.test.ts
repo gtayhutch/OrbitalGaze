@@ -3,6 +3,7 @@
  */
 import {expect, it, vi} from 'vitest';
 
+import {buildWorkerConfig} from '../../../test_support/factories';
 import {normalizeEarthquakeFeed, USGS_EARTHQUAKES} from './usgs_earthquakes';
 
 /** One USGS feature with extra metadata that should stay upstream. */
@@ -52,7 +53,11 @@ it('fetches only the USGS past-day summary', async () => {
       }),
     ),
   );
-  const result = await USGS_EARTHQUAKES.fetchItems({fetch, now: new Date(0)});
+  const result = await USGS_EARTHQUAKES.fetchItems({
+    fetch,
+    now: new Date(0),
+    config: buildWorkerConfig(),
+  });
   expect(result).toHaveLength(1);
   expect(fetch).toHaveBeenCalledTimes(1);
   const url = fetch.mock.calls[0]?.[0];

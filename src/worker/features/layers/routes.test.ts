@@ -16,6 +16,7 @@ import {dataEnvelope} from '@/shared/api/envelope';
 import {layerSnapshotSchema} from '@/shared/layers';
 
 import {createApp} from '../../app';
+import {buildWorkerConfig} from '../../test_support/factories';
 import {getPath} from '../../test_support/send_request';
 import {
   buildFakePoint,
@@ -49,6 +50,7 @@ async function storeSnapshot(
 ): Promise<void> {
   await refreshSnapshot(source, {
     bucket: env.LAYER_SNAPSHOTS,
+    config: buildWorkerConfig(),
     now: new Date('2026-11-18T10:05:00Z'),
     fetch: fakeFeedServing(points).fetch,
   });

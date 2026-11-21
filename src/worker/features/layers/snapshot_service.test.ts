@@ -7,6 +7,7 @@
  */
 import {env} from 'cloudflare:workers';
 import {describe, expect, it} from 'vitest';
+import {buildWorkerConfig} from '../../test_support/factories';
 import {z} from 'zod';
 
 import {dataEnvelope} from '@/shared/api/envelope';
@@ -62,6 +63,22 @@ describe('isDue', () => {
     },
   );
 
+  it.each([
+    ['00:25', 25, true],
+    ['06:25', 25, true],
+    ['06:00', 25, false],
+    ['03:25', 205, true],
+    ['21:25', 205, true],
+    ['00:25', 205, false],
+  ])(
+    'with a 6-hour interval at %s and offset %i, due is %s',
+    (at, offset, due) => {
+      expect(
+        isDue({refreshMinutes: 360}, new Date(`2026-11-20T${at}:00Z`), offset),
+      ).toBe(due);
+    },
+  );
+
   it('counts from midnight UTC, not from local time', () => {
     // 23:00 UTC is a whole hour in UTC even where local time is 18:30.
     expect(isDue({refreshMinutes: 60}, new Date('2026-11-18T23:00:00Z'))).toBe(
@@ -77,6 +94,7 @@ describe('refreshSnapshot', () => {
 
     const result = await refreshSnapshot(source, {
       bucket: env.LAYER_SNAPSHOTS,
+      config: buildWorkerConfig(),
       now: TEN_OH_FIVE,
       fetch: fakeFeedServing(points).fetch,
     });
@@ -106,6 +124,7 @@ describe('refreshSnapshot', () => {
 
     await refreshSnapshot(source, {
       bucket: env.LAYER_SNAPSHOTS,
+      config: buildWorkerConfig(),
       now: TEN_OH_FIVE,
       fetch: feed.fetch,
     });
@@ -120,6 +139,7 @@ describe('refreshSnapshot', () => {
     const source = buildFakeSnapshotSource();
     await refreshSnapshot(source, {
       bucket: env.LAYER_SNAPSHOTS,
+      config: buildWorkerConfig(),
       now: TEN_OH_FIVE,
       fetch: fakeFeedServing([buildFakePoint()]).fetch,
     });
@@ -128,6 +148,7 @@ describe('refreshSnapshot', () => {
     await expect(
       refreshSnapshot(source, {
         bucket: env.LAYER_SNAPSHOTS,
+        config: buildWorkerConfig(),
         now: new Date('2026-11-18T10:10:00Z'),
         fetch: fakeFeedFailing(503).fetch,
       }),
@@ -140,6 +161,7 @@ describe('refreshSnapshot', () => {
     const source = buildFakeSnapshotSource();
     await refreshSnapshot(source, {
       bucket: env.LAYER_SNAPSHOTS,
+      config: buildWorkerConfig(),
       now: TEN_OH_FIVE,
       fetch: fakeFeedServing([buildFakePoint()]).fetch,
     });
@@ -148,6 +170,7 @@ describe('refreshSnapshot', () => {
     await expect(
       refreshSnapshot(source, {
         bucket: env.LAYER_SNAPSHOTS,
+        config: buildWorkerConfig(),
         now: new Date('2026-11-18T10:10:00Z'),
         fetch: fakeFeedServing([{id: 'x', lat: 'north', lng: 0}]).fetch,
       }),
@@ -162,6 +185,7 @@ describe('refreshSnapshot', () => {
     await expect(
       refreshSnapshot(source, {
         bucket: env.LAYER_SNAPSHOTS,
+        config: buildWorkerConfig(),
         now: TEN_OH_FIVE,
         fetch: fakeFeedFailing(500).fetch,
       }),
@@ -179,6 +203,7 @@ describe('refreshDueSnapshots', () => {
 
     const outcomes = await refreshDueSnapshots([everyFive, hourly], {
       bucket: env.LAYER_SNAPSHOTS,
+      config: buildWorkerConfig(),
       now: TEN_OH_FIVE,
       fetch: feed.fetch,
     });
@@ -203,6 +228,7 @@ describe('refreshDueSnapshots', () => {
 
     const outcomes = await refreshDueSnapshots([failing, working], {
       bucket: env.LAYER_SNAPSHOTS,
+      config: buildWorkerConfig(),
       now: TEN_OH_FIVE,
       fetch: routedFetch,
     });
@@ -233,6 +259,7 @@ describe('refreshDueSnapshots', () => {
 
     const outcomes = await refreshDueSnapshots([hourly], {
       bucket: env.LAYER_SNAPSHOTS,
+      config: buildWorkerConfig(),
       now: TEN_OH_FIVE,
       fetch: fakeFeedServing([]).fetch,
     });

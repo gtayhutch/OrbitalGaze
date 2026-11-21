@@ -27,7 +27,8 @@ import {
   type OutboundFailure,
 } from '../../lib/outbound_fetch';
 import {createSnapshotRepository} from './snapshot_repository';
-import type {SnapshotSource} from './snapshot_source';
+import type {WorkerConfig} from '../../lib/config';
+import {SourceNotConfiguredError, type SnapshotSource} from './snapshot_source';
 
 /**
  * Checks a snapshot's outer shape (ID format, timestamp, item cap) before it
@@ -43,6 +44,8 @@ export interface RefreshDependencies {
   readonly now: Date;
   /** Passed to the source for its outbound requests. */
   readonly fetch: FetchFunction;
+  /** The Worker's settings (credentials, per-environment offsets). */
+  readonly config: WorkerConfig;
 }
 
 /** What one successful refresh stored. */
@@ -61,7 +64,8 @@ export interface RefreshResult {
  * its data didn't pass validation; `unexpected` is anything else, such as a
  * storage error. Never contains anything the feed sent.
  */
-export type RefreshFailure = OutboundFailure | 'invalid-data' | 'unexpected';
+export type RefreshFailure =
+  OutboundFailure | 'invalid-data' | 'not-configured' | 'unexpected';
 
 /** The result of one layer's refresh attempt, for the job's log. */
 export interface RefreshOutcome {
@@ -82,25 +86,31 @@ export interface RefreshOutcome {
 /**
  * Tells whether a layer should refresh at this cron run.
  *
- * Intervals are counted from midnight UTC, so a 15-minute layer refreshes at
- * :00, :15, :30, and :45 every hour, whatever time the Worker was deployed.
- * The cron's scheduled time always falls on a whole minute, so seconds are
- * ignored.
+ * Intervals are counted from midnight UTC plus the source's offset, so a
+ * 15-minute layer refreshes at :00, :15, :30 and :45 every hour, and a
+ * 6-hour layer with a 25-minute offset at 00:25, 06:25, 12:25 and 18:25,
+ * whatever time the Worker was deployed. The cron's scheduled time always
+ * falls on a whole minute, so seconds are ignored.
  *
  * @param source The layer's source (only its interval is read).
  * @param now The cron's scheduled time.
- * @returns True when the minute of the UTC day is a multiple of the
- *     layer's `refreshMinutes`.
+ * @param offsetMinutes The source's offset for this environment (default 0).
+ * @returns True when the minute of the UTC day, less the offset, is a
+ *     multiple of the layer's `refreshMinutes`.
  * @example
  * isDue({refreshMinutes: 15}, new Date('2026-11-18T10:45:00Z')); // true
  * isDue({refreshMinutes: 15}, new Date('2026-11-18T10:50:00Z')); // false
+ * isDue({refreshMinutes: 360}, new Date('2026-11-18T06:25:00Z'), 25); // true
  */
 export function isDue(
   source: Pick<SnapshotSource, 'refreshMinutes'>,
   now: Date,
+  offsetMinutes = 0,
 ): boolean {
   const minuteOfDay = now.getUTCHours() * 60 + now.getUTCMinutes();
-  return minuteOfDay % source.refreshMinutes === 0;
+  const sinceOffset =
+    (minuteOfDay - offsetMinutes + 24 * 60) % source.refreshMinutes;
+  return sinceOffset === 0;
 }
 
 /**
@@ -127,7 +137,11 @@ export async function refreshSnapshot(
 ): Promise<RefreshResult> {
   // Step 1: ask the source for fresh, validated items. If this throws,
   // nothing below runs, so the previous snapshot stays in place.
-  const items = await source.fetchItems({fetch: deps.fetch, now: deps.now});
+  const items = await source.fetchItems({
+    fetch: deps.fetch,
+    now: deps.now,
+    config: deps.config,
+  });
 
   // Step 2: build the snapshot and check its outer shape, so a source can't
   // store an oversized list or a malformed ID.
@@ -164,6 +178,9 @@ export function describeRefreshFailure(
   }
   if (error instanceof z.ZodError) {
     return {failure: 'invalid-data', httpStatus: null, errorName: null};
+  }
+  if (error instanceof SourceNotConfiguredError) {
+    return {failure: 'not-configured', httpStatus: null, errorName: null};
   }
   const errorName = error instanceof Error ? error.name : typeof error;
   return {failure: 'unexpected', httpStatus: null, errorName};
@@ -207,7 +224,9 @@ export async function refreshDueSnapshots(
   sources: readonly SnapshotSource[],
   deps: RefreshDependencies,
 ): Promise<RefreshOutcome[]> {
-  const due = sources.filter(source => isDue(source, deps.now));
+  const due = sources.filter(source =>
+    isDue(source, deps.now, source.refreshOffsetMinutes?.(deps.config) ?? 0),
+  );
 
   // Promise.allSettled rather than Promise.all: every due layer runs to the
   // end and reports, even when another layer's feed is down.

@@ -28,7 +28,7 @@ import {
   SNAPSHOT_SOURCES,
   type SnapshotSource,
 } from '../features/layers';
-import {parseWorkerConfig} from '../lib/config';
+import {parseWorkerConfig, type WorkerConfig} from '../lib/config';
 import {createLogger, type Logger} from '../lib/logger';
 import type {FetchFunction} from '../lib/outbound_fetch';
 
@@ -100,6 +100,7 @@ async function planImport(
  * @param bucket The `LAYER_SNAPSHOTS` bucket.
  * @param now The cron's scheduled time.
  * @param fetchForSources The `fetch` the sources use.
+ * @param config The Worker's settings (credentials, offsets).
  * @param logger Logger for the job.
  */
 async function refreshLayers(
@@ -107,12 +108,14 @@ async function refreshLayers(
   bucket: R2Bucket,
   now: Date,
   fetchForSources: FetchFunction,
+  config: WorkerConfig,
   logger: Logger,
 ): Promise<void> {
   const outcomes = await refreshDueSnapshots(sources, {
     bucket,
     now,
     fetch: fetchForSources,
+    config,
   });
   if (outcomes.length === 0) {
     logger.info('layer refresh: no layers due');
@@ -196,6 +199,7 @@ export async function handleScheduled(
       env.LAYER_SNAPSHOTS,
       now,
       deps.fetch ?? fetch,
+      config,
       logger,
     );
 
