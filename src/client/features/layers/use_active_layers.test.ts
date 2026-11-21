@@ -6,6 +6,7 @@
 import {act, renderHook} from '@testing-library/react';
 import {describe, expect, it} from 'vitest';
 
+import type {LayerId} from './registry';
 import {LAYER_CHOICES_STORAGE_KEY, useActiveLayers} from './use_active_layers';
 
 describe('useActiveLayers', () => {
@@ -80,21 +81,23 @@ describe('useActiveLayers with layers from a share link', () => {
   });
 });
 
-describe('useActiveLayers with an unreleased layer', () => {
+describe('useActiveLayers with a layer that is not released', () => {
   it('never switches it on, on a link visit or from saved choices', () => {
+    // Stands for a built but unreleased (or removed) layer.
+    const notReleased = 'volcanoes' as LayerId;
     const linkVisit = renderHook(() =>
-      useActiveLayers(new Set<'webcams'>(['webcams'])),
+      useActiveLayers(new Set<LayerId>(['webcams'])),
     );
     act(() => {
-      linkVisit.result.current.setLayerActive('satellites', true);
+      linkVisit.result.current.setLayerActive(notReleased, true);
     });
-    expect(linkVisit.result.current.active.has('satellites')).toBe(false);
+    expect(linkVisit.result.current.active.has(notReleased)).toBe(false);
 
     const normalVisit = renderHook(() => useActiveLayers());
     act(() => {
-      normalVisit.result.current.setLayerActive('satellites', true);
+      normalVisit.result.current.setLayerActive(notReleased, true);
     });
-    expect(normalVisit.result.current.active.has('satellites')).toBe(false);
+    expect(normalVisit.result.current.active.has(notReleased)).toBe(false);
     expect(window.localStorage.getItem(LAYER_CHOICES_STORAGE_KEY)).toBeNull();
   });
 });

@@ -60,7 +60,28 @@ export interface WorkerConfig {
    * it lives in `wrangler.jsonc` vars.
    */
   readonly basemapArchive: string | null;
+  /**
+   * The Space-Track.org login used by the satellites refresh, or `null`
+   * when it isn't set. Worker secrets, never logged. Without it the
+   * satellites source sends no requests and reports "not configured".
+   */
+  readonly spaceTrack: SpaceTrackCredentials | null;
+  /**
+   * Minutes past midnight UTC of the first satellites refresh of the day
+   * (then every 6 hours). Staging and production share one Space-Track
+   * account, so they use different offsets and never pull in the same hour.
+   */
+  readonly satelliteRefreshOffsetMinutes: number;
 }
+
+/** A Space-Track.org login (Worker secrets). */
+export interface SpaceTrackCredentials {
+  readonly identity: string;
+  readonly password: string;
+}
+
+/** Offset used when `SATELLITE_REFRESH_OFFSET_MINUTES` isn't set. */
+export const DEFAULT_SATELLITE_REFRESH_OFFSET_MINUTES = 25;
 
 /**
  * A safe archive key: lowercase path segments ending in `.pmtiles`, with no
@@ -71,6 +92,23 @@ const BasemapArchiveSchema = z
   .regex(/^[a-z0-9][a-z0-9_-]*(?:\/[a-z0-9][a-z0-9_.-]*)*\.pmtiles$/)
   .max(120)
   .refine(key => !key.includes('..'), 'Must not contain "..".');
+
+/**
+ * An offset within the 6-hour satellites interval, on the 5-minute cron:
+ * a whole multiple of 5 from 0 to 355.
+ */
+const RefreshOffsetSchema = z.coerce
+  .number()
+  .int()
+  .min(0)
+  .max(355)
+  .refine(minutes => minutes % 5 === 0, 'Must be a multiple of 5.');
+
+/** An optional secret: empty means "not set". */
+const OptionalSecretSchema = z
+  .string()
+  .optional()
+  .transform(value => (value === undefined || value === '' ? null : value));
 
 /** Environments that must have every secret set. */
 const HOSTED_ENVIRONMENTS: ReadonlySet<AppEnvironment> = new Set([
@@ -94,7 +132,21 @@ const RawWorkerSettingsSchema = z
     BASEMAP_ARCHIVE: BasemapArchiveSchema.optional().transform(
       value => value ?? null,
     ),
+    SPACETRACK_IDENTITY: OptionalSecretSchema,
+    SPACETRACK_PASSWORD: OptionalSecretSchema,
+    SATELLITE_REFRESH_OFFSET_MINUTES: RefreshOffsetSchema.optional().transform(
+      value => value ?? DEFAULT_SATELLITE_REFRESH_OFFSET_MINUTES,
+    ),
   })
+  .refine(
+    settings =>
+      (settings.SPACETRACK_IDENTITY === null) ===
+      (settings.SPACETRACK_PASSWORD === null),
+    {
+      path: ['SPACETRACK_PASSWORD'],
+      message: 'Set both Space-Track settings, or neither.',
+    },
+  )
   .refine(
     settings =>
       settings.WINDY_API_KEY !== null ||
@@ -140,5 +192,14 @@ export function parseWorkerConfig(env: unknown): WorkerConfig {
     appEnvironment: result.data.APP_ENV,
     windyApiKey: result.data.WINDY_API_KEY,
     basemapArchive: result.data.BASEMAP_ARCHIVE,
+    spaceTrack:
+      result.data.SPACETRACK_IDENTITY !== null &&
+      result.data.SPACETRACK_PASSWORD !== null
+        ? {
+            identity: result.data.SPACETRACK_IDENTITY,
+            password: result.data.SPACETRACK_PASSWORD,
+          }
+        : null,
+    satelliteRefreshOffsetMinutes: result.data.SATELLITE_REFRESH_OFFSET_MINUTES,
   };
 }

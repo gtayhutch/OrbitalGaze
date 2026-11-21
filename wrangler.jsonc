@@ -44,6 +44,10 @@
     // versioned by key; switching basemaps is a new key here, never an
     // overwrite. Locally the bucket is empty until a basemap is seeded.
     "BASEMAP_ARCHIVE": "planet/local.pmtiles",
+    // Minutes past midnight UTC of the first satellites refresh (then every
+    // 6 hours). Staging and production share one Space-Track account, so
+    // their offsets keep them in different hours, and away from :00/:30.
+    "SATELLITE_REFRESH_OFFSET_MINUTES": "25",
   },
 
   "d1_databases": [
@@ -132,6 +136,8 @@
       "vars": {
         "APP_ENV": "staging",
         "BASEMAP_ARCHIVE": "planet/20261118.pmtiles",
+        // 03:25, 09:25, 15:25, 21:25 UTC (production uses :25 past 0/6/12/18).
+        "SATELLITE_REFRESH_OFFSET_MINUTES": "205",
       },
       "secrets": {"required": ["WINDY_API_KEY"]},
       "queues": {
@@ -198,6 +204,8 @@
       "vars": {
         "APP_ENV": "production",
         "BASEMAP_ARCHIVE": "planet/20261118.pmtiles",
+        // 00:25, 06:25, 12:25, 18:25 UTC.
+        "SATELLITE_REFRESH_OFFSET_MINUTES": "25",
       },
       "secrets": {"required": ["WINDY_API_KEY"]},
       "queues": {

@@ -11,6 +11,8 @@ import {
   fetchText,
   isAllowedUrl,
   OutboundError,
+  postFormForCookie,
+  type FetchFunction,
 } from './outbound_fetch';
 
 /** Options shared by most tests: one allowed host, small limits. */
@@ -267,5 +269,77 @@ describe('fetchText', () => {
         )
       ).failure,
     ).toBe('too-large');
+  });
+});
+
+describe('postFormForCookie', () => {
+  /** A login answer with the given body and cookies. */
+  function loginAnswer(body: string, cookies: string[] = []): Response {
+    const headers = new Headers({'Content-Type': 'application/json'});
+    for (const cookie of cookies) {
+      headers.append('Set-Cookie', cookie);
+    }
+    return new Response(body, {status: 200, headers});
+  }
+  const refused = (text: string) => text.includes('Failed');
+
+  it('posts the form and returns the cookies as one header value', async () => {
+    let sentBody = '';
+    let sentType = '';
+    const cookie = await postFormForCookie(
+      new URL('https://api.example.com/login'),
+      new URLSearchParams({identity: 'a', password: 'b'}),
+      {
+        ...baseOptions,
+        fetch: ((_input, init) => {
+          sentBody = typeof init?.body === 'string' ? init.body : '';
+          sentType = new Headers(init?.headers).get('Content-Type') ?? '';
+          return Promise.resolve(
+            loginAnswer('""', ['one=1; path=/; secure', 'two=2; HttpOnly']),
+          );
+        }) satisfies FetchFunction,
+      },
+      refused,
+    );
+
+    expect(cookie).toBe('one=1; two=2');
+    expect(sentBody).toBe('identity=a&password=b');
+    expect(sentType).toBe('application/x-www-form-urlencoded');
+  });
+
+  it('treats a refusal sent with HTTP 200, or no cookie, as a 403', async () => {
+    for (const answer of [
+      loginAnswer('{"Login":"Failed"}', ['x=1']),
+      loginAnswer('""'),
+    ]) {
+      const error = await failureOf(
+        postFormForCookie(
+          new URL('https://api.example.com/login'),
+          new URLSearchParams({identity: 'a', password: 'secret-marker'}),
+          {...baseOptions, fetch: () => Promise.resolve(answer)},
+          refused,
+        ),
+      );
+
+      expect(error.failure).toBe('http-status');
+      expect(error.status).toBe(403);
+      expect(error.message).not.toContain('secret-marker');
+    }
+  });
+
+  it('applies the allowlist before sending anything', async () => {
+    const fake = fakeFetch(() => loginAnswer('""', ['x=1']));
+
+    const error = await failureOf(
+      postFormForCookie(
+        new URL('https://evil.example.com/login'),
+        new URLSearchParams(),
+        {...baseOptions, fetch: fake.fetch},
+        refused,
+      ),
+    );
+
+    expect(error.failure).toBe('blocked-url');
+    expect(fake.requests).toHaveLength(0);
   });
 });
